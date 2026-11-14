@@ -1,6 +1,6 @@
-/*
- * Eye / eye-off outlines. Works inside HTML and inside another <svg>.
- *
+/* Eye / eye-off outlines. Works inside HTML and inside another <svg>. */
+
+/*!
  * Icon paths from Feather (https://github.com/feathericons/feather)
  * The MIT License (MIT)
  * Copyright (c) 2013-2023 Cole Bemis

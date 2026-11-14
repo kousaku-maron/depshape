@@ -9,14 +9,13 @@ push 前のローカルレビューで、コード差分を見る前に「追加
 
 ## 使い方
 
+解析したいリポジトリの中で実行します（Node.js 20 以上と git が必要です）。
+
 ```bash
-pnpm install
-pnpm build
-# 解析したいリポジトリの中で
-node /path/to/depshape/dist/cli.js [target] [compare-with] [options]
+npx depshape . main --merge-base
 ```
 
-`pnpm link --global` しておけば `depshape` コマンドとして使えます。
+よく使うなら `npm install -g depshape` で `depshape` コマンドとして入れておけます。以下の表の `depshape` は、npx で使う場合は `npx depshape` と読み替えてください。
 
 | コマンド | 比較内容 |
 |---|---|
@@ -64,9 +63,11 @@ node /path/to/depshape/dist/cli.js [target] [compare-with] [options]
 ## 開発
 
 ```bash
-pnpm test        # パーサと差分計算のテスト
+pnpm install
+pnpm test        # パーサ・差分計算・ビューのテスト
 pnpm typecheck
-pnpm dev -- --no-open   # tsx で CLI を直接実行（UI は事前に pnpm build:ui が必要）
+pnpm build       # dist/ に CLI と UI をビルド
+node dist/cli.js --no-open   # 解析したいリポジトリの中で
 ```
 
 ## 今後の予定
