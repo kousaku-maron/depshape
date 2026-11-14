@@ -1,5 +1,5 @@
 {
-  "name": "depshape",
+  "name": "@kousaku-maron/depshape",
   "version": "0.1.0",
   "description": "Visualize how a git diff changes folder/file dependencies, side by side with existing siblings",
   "keywords": [
@@ -33,6 +33,9 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",

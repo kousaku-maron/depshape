@@ -12,10 +12,10 @@ push 前のローカルレビューで、コード差分を見る前に「追加
 解析したいリポジトリの中で実行します（Node.js 20 以上と git が必要です）。
 
 ```bash
-npx depshape . main --merge-base
+npx @kousaku-maron/depshape . main --merge-base
 ```
 
-よく使うなら `npm install -g depshape` で `depshape` コマンドとして入れておけます。以下の表の `depshape` は、npx で使う場合は `npx depshape` と読み替えてください。
+よく使うなら `npm install -g @kousaku-maron/depshape` で入れておくと、`depshape` コマンドとして使えます。以下の表の `depshape` は、npx で使う場合は `npx @kousaku-maron/depshape` と読み替えてください。
 
 | コマンド | 比較内容 |
 |---|---|
