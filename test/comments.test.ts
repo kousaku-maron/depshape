@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DiffGraph, Edge, FileNode } from "../src/types";
-import { commentState, formatPrompt, importPath, itemKey, linkKey, noTestSnapshot, parseKey, type ReviewComment } from "../ui/src/comments";
+import { commentState, formatPrompt, importPath, itemKey, linkKey, parseKey, type ReviewComment } from "../ui/src/comments";
 import { buildModel, buildTree } from "../ui/src/model";
 
 function file(path: string, status: FileNode["status"] = "unchanged"): FileNode {
@@ -23,7 +23,7 @@ function graphWith(files: FileNode[], edges: Edge[]): DiffGraph {
   };
 }
 
-// existing handlers go through usecase; the new one calls the driver directly and has no test
+// existing handlers go through usecase; the new one calls the driver directly
 const before = graphWith(
   [
     file("app/handler/a.go"),
@@ -43,8 +43,8 @@ const before = graphWith(
 const NEW_LINK = linkKey("f:app/handler/new.go", "d:app/driver/api");
 const NEW_FILE = itemKey("f:app/handler/new.go");
 
-function comment(targets: string[], model = buildModel(before)): ReviewComment {
-  return { id: "c1", targets, body: "usecase を経由してください", createdAt: 0, noTestAtCreation: noTestSnapshot(model, targets) };
+function comment(targets: string[]): ReviewComment {
+  return { id: "c1", targets, body: "usecase を経由してください", createdAt: 0 };
 }
 
 describe("comment keys", () => {
@@ -55,21 +55,21 @@ describe("comment keys", () => {
 });
 
 describe("formatPrompt", () => {
-  it("adds the import path, link status, missing test and the folder's existing pattern", () => {
+  it("adds the import path, link status and the folder's existing pattern", () => {
     const model = buildModel(before);
     const { byPath } = buildTree(model);
     const { text, included } = formatPrompt(model, byPath, [comment([NEW_LINK, NEW_FILE])]);
     expect(included).toBe(1);
     expect(text).toContain("リポジトリ: /repo");
     expect(text).toContain("app/handler/new.go → example.com/app/driver/api（今回追加した import）");
-    expect(text).toContain("ファイル app/handler/new.go（今回追加、同じ名前の _test.go なし）");
+    expect(text).toContain("ファイル app/handler/new.go（今回追加）");
     expect(text).toContain("参考: app/handler/ の変更のないファイル 3 個の主な依存先: example.com/app/usecase (2)");
     expect(text).toContain("コメント: usecase を経由してください");
   });
 });
 
 describe("commentState", () => {
-  it("resolves when the dependency disappears and the missing test appears", () => {
+  it("resolves when the dependency and the file disappear", () => {
     const c = comment([NEW_LINK, NEW_FILE]);
     const fixedLink = graphWith(
       [...before.files, file("app/handler/x.go")],
@@ -78,7 +78,15 @@ describe("commentState", () => {
     const m1 = buildModel(fixedLink);
     expect(commentState(m1, buildTree(m1).byPath, c)).toBe("partial");
 
-    const fixedBoth = graphWith([...fixedLink.files, file("app/handler/new_test.go", "added")], fixedLink.edges);
+    // adding a test file does not resolve a file comment; only the file going away does
+    const withTest = graphWith([...fixedLink.files, file("app/handler/new_test.go", "added")], fixedLink.edges);
+    const mt = buildModel(withTest);
+    expect(commentState(mt, buildTree(mt).byPath, c)).toBe("partial");
+
+    const fixedBoth = graphWith(
+      fixedLink.files.filter((f) => f.path !== "app/handler/new.go"),
+      fixedLink.edges.filter((e) => e.from !== "app/handler/new.go"),
+    );
     const m2 = buildModel(fixedBoth);
     expect(commentState(m2, buildTree(m2).byPath, c)).toBe("resolved");
     // resolved comments are left out of the prompt

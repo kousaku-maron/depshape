@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { analyze, type CompareOptions } from "./analyze.js";
 import { startServer } from "./server.js";
 
-const HELP = `depshape - git の差分による依存関係の変化を、既存の構造と並べて可視化します（Go 対応）
+const HELP = `depshape - git の差分による依存関係の変化を、既存の構造と並べて可視化します（Go / TypeScript / JavaScript 対応）
 
 使い方:
   depshape [target] [compare-with] [options]

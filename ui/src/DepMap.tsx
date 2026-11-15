@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { CommentSidebar, type Draft } from "./CommentViews";
-import { commentState, itemKey, lacksTest, noTestSnapshot, parseKey, type ReviewComment } from "./comments";
+import { commentState, itemKey, parseKey, type ReviewComment } from "./comments";
 import { DepPanel } from "./DepPanel";
 import { EyeIcon } from "./icons";
-import type { Model, TreeDir } from "./model";
+import { parentDir, type Model, type TreeDir } from "./model";
 import { buildAllView, buildChangesView, type MapMode, type View, type ViewNode } from "./view";
 
 /*
@@ -42,11 +42,6 @@ export interface DepMapProps {
 interface Mark {
   added: number;
   removed: number;
-}
-
-/** Changed source files with no same-name _test.go next to them. */
-function missingTests(model: Model): Set<string> {
-  return new Set(model.graph.files.filter((f) => lacksTest(model, f)).map((f) => f.path));
 }
 
 const isAdditive = (e: MouseEvent) => e.metaKey || e.ctrlKey || e.shiftKey;
@@ -94,8 +89,13 @@ export function DepMap(props: DepMapProps) {
     [model, root, tree, mode, openKey, collapsedKey],
   );
   const marks = useMemo(() => depMarks(model, view), [model, view]);
-  const noTest = useMemo(() => missingTests(model), [model]);
   const pinned = useMemo(() => new Set(pins), [pins]);
+  // rows of the panel's target tree the user opened or folded
+  const [targetOpen, setTargetOpen] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const toggleTarget = (id: string, open: boolean) => setTargetOpen((prev) => new Map(prev).set(id, open));
+  // source folders opened in the panel
+  const [sourceOpen, setSourceOpen] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const toggleSource = (id: string, open: boolean) => setSourceOpen((prev) => new Map(prev).set(id, open));
 
   // ---- comments: what is selected, the draft being written, and two-way highlighting ----
   const [selection, setSelection] = useState<string[]>([]);
@@ -158,11 +158,7 @@ export function DepMap(props: DepMapProps) {
   const saveComment = () => {
     if (!draft.body.trim() || selection.length === 0) return;
     const next = draft.editingId
-      ? comments.map((c) =>
-          c.id === draft.editingId
-            ? { ...c, targets: selection, body: draft.body.trim(), noTestAtCreation: [...new Set([...c.noTestAtCreation, ...noTestSnapshot(model, selection)])] }
-            : c,
-        )
+      ? comments.map((c) => (c.id === draft.editingId ? { ...c, targets: selection, body: draft.body.trim() } : c))
       : [
           ...comments,
           {
@@ -170,7 +166,6 @@ export function DepMap(props: DepMapProps) {
             targets: selection,
             body: draft.body.trim(),
             createdAt: Date.now(),
-            noTestAtCreation: noTestSnapshot(model, selection),
           },
         ];
     props.onCommentsChange(next);
@@ -179,8 +174,32 @@ export function DepMap(props: DepMapProps) {
 
   /** Bring a comment back into view: pin the files its dependencies start from and select its targets. */
   const showComment = (c: ReviewComment) => {
-    const sources = c.targets.map(parseKey).flatMap((t) => (t.kind === "link" ? [t.from] : []));
-    props.onPin(sources);
+    const links = c.targets.map(parseKey).flatMap((t) => (t.kind === "link" ? [t] : []));
+    // a dependent link (from the left column) ends at the shown item; others start at it
+    props.onPin(links.map((t) => (t.from.startsWith("i:") ? t.to : t.from)));
+    // unfold the panel's trees down to each commented dependency
+    setTargetOpen((prev) => {
+      const next = new Map(prev);
+      for (const t of links) {
+        if (t.from.startsWith("i:")) {
+          const id = t.from.slice(2);
+          const dir = id.startsWith("f:") ? parentDir(id.slice(2)) : id.slice(2);
+          for (let a = parentDir(dir); a; a = parentDir(a)) next.set(`i:g:${a}`, true);
+          if (id.startsWith("f:")) next.set(`i:d:${dir}`, true).set(`i:g:${dir}`, true);
+          else if (id.startsWith("d:")) next.set(`i:d:${dir}`, false).set(`i:g:${dir}`, true);
+          else next.set(`i:g:${dir}`, false);
+          continue;
+        }
+        if (t.to.startsWith("x:")) continue;
+        const target = t.to.slice(2);
+        const dir = t.to.startsWith("t:") ? parentDir(target) : target;
+        for (let a = parentDir(dir); a; a = parentDir(a)) next.set(`g:${a}`, true);
+        if (t.to.startsWith("t:")) next.set(`d:${dir}`, true).set(`g:${dir}`, true);
+        else if (t.to.startsWith("d:")) next.set(`d:${dir}`, false).set(`g:${dir}`, true);
+        else next.set(`g:${dir}`, false);
+      }
+      return next;
+    });
     setSelection(c.targets);
   };
   const editComment = (c: ReviewComment) => {
@@ -189,15 +208,15 @@ export function DepMap(props: DepMapProps) {
     focusInput();
   };
 
-  // hovering a row shows it in the panel; leaving the tree keeps it briefly so the mouse can reach the panel
+  // a row shows in the panel only while the mouse is on it; the short delay only bridges the gap
+  // between two rows so the panel does not flash empty while moving down the tree
   const hover = (id: string) => {
     window.clearTimeout(clearTimer.current);
     setHovered(id);
   };
-  const keepHover = () => window.clearTimeout(clearTimer.current);
   const releaseHover = () => {
     window.clearTimeout(clearTimer.current);
-    clearTimer.current = window.setTimeout(() => setHovered(null), 500);
+    clearTimer.current = window.setTimeout(() => setHovered(null), 80);
   };
 
   const rowEl = (id: string) => scrollRef.current?.querySelector<HTMLElement>(`[data-id="${CSS.escape(id)}"]`) ?? null;
@@ -263,7 +282,8 @@ export function DepMap(props: DepMapProps) {
         className={cls}
         data-id={n.id}
         title={rowTitle(n)}
-        onMouseEnter={() => hover(n.id)}
+        onMouseEnter={() => (n.kind === "rest" ? releaseHover() : hover(n.id))}
+        onMouseLeave={releaseHover}
         onClick={(e) => {
           if (isAdditive(e)) selectKeys([itemKey(n.id)], true);
           else if (n.kind !== "file") toggle(n);
@@ -282,11 +302,6 @@ export function DepMap(props: DepMapProps) {
         {m && m.added > 0 && (
           <span className="tmark added" title="今回増えた import">
             +{m.added} 依存
-          </span>
-        )}
-        {n.kind === "file" && noTest.has(n.path) && (
-          <span className="tmark notest" title="同じ名前の _test.go がありません">
-            テストなし
           </span>
         )}
         {m && m.removed > 0 && (
@@ -310,13 +325,18 @@ export function DepMap(props: DepMapProps) {
         >
           💬
         </button>
-        <button
-          className={`tbtn tpin${isPinned ? " on" : ""}`}
-          onClick={stop(() => props.onTogglePin(n.id))}
-          title={isPinned ? "右のパネルに表示中（クリックで非表示）" : "右のパネルに表示し続ける"}
-        >
-          <EyeIcon on={isPinned} />
-        </button>
+        {n.kind === "rest" ? (
+          // "ほか N フォルダ・M ファイル" is a fold in the tree, not a thing to compare; pin the folder and open it instead
+          <span className="tbtn-space" />
+        ) : (
+          <button
+            className={`tbtn tpin${isPinned ? " on" : ""}`}
+            onClick={stop(() => props.onTogglePin(n.id))}
+            title={isPinned ? "右のパネルに表示中（クリックで非表示）" : "右のパネルに表示し続ける"}
+          >
+            <EyeIcon on={isPinned} />
+          </button>
+        )}
       </div>
     );
   };
@@ -377,13 +397,15 @@ export function DepMap(props: DepMapProps) {
           onTogglePin={props.onTogglePin}
           onClearPins={props.onClearPins}
           includeExternal={props.includeExternal}
-          onMouseEnter={keepHover}
-          onMouseLeave={releaseHover}
           selection={selected}
           litKeys={litKeys}
           commentCounts={commentCounts}
           onSelectKeys={selectKeys}
           onHoverKey={setHoveredKey}
+          targetOpen={targetOpen}
+          sourceOpen={sourceOpen}
+          onToggleSource={toggleSource}
+          onToggleTarget={toggleTarget}
         />
         {sidebarOpen && (
           <CommentSidebar
@@ -412,7 +434,7 @@ export function DepMap(props: DepMapProps) {
       <div className="legend">
         <span className="muted">
           行にホバーすると右のパネルに依存先が出ます ・ 目のアイコンで表示し続け、複数並べて比べられます ・ 矢印や箱のクリック（⌘ / Shift で複数）・行の 💬 でコメント（c キーで入力欄へ）・ 「+n 依存」= 今回増えた import ・
-          {mode === "changes" ? " 「ほか N ファイル」= 変更のない既存ファイル（クリックで展開）" : " フォルダをクリックで開閉"} ・ 「テストなし」= 同じ名前の _test.go がない変更ファイル
+          {mode === "changes" ? " 「ほか N ファイル」= 変更のない既存ファイル（クリックで展開）" : " フォルダをクリックで開閉"}
         </span>
       </div>
     </div>

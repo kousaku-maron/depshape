@@ -1,6 +1,5 @@
-import type { FileNode } from "../../src/types";
-import { moduleOf, type Model, type TreeDir } from "./model";
-import { resolveSource, sourceLinks, type PanelLink } from "./panel";
+import { baseName, moduleOf, type Model, type TreeDir } from "./model";
+import { findLink, resolveSource, sourceLinks, type PanelLink } from "./panel";
 import { pathOf } from "./view";
 
 /*
@@ -9,7 +8,8 @@ import { pathOf } from "./view";
  * prompt for an AI agent.
  *
  * Targets are stored as string keys so they survive re-analysis:
- *   L:<sourceId>><targetId>   a dependency drawn in the panel (e.g. L:f:a/b.go>d:lib/hoge)
+ *   L:<sourceId>><targetId>   a dependency drawn in the panel (e.g. L:f:a/b.go>d:lib/hoge;
+ *                             targets may also be g:<dir> folded groups or t:<file> TS files)
  *   I:<nodeId>                a tree row (f:<file>, d:<dir>, r:<dir>)
  */
 
@@ -18,8 +18,6 @@ export interface ReviewComment {
   targets: string[];
   body: string;
   createdAt: number;
-  /** changed files that had no same-name _test.go when the comment was written */
-  noTestAtCreation: string[];
 }
 
 export type TargetState = "open" | "resolved";
@@ -37,41 +35,13 @@ export function parseKey(key: string): { kind: "link"; from: string; to: string 
   return { kind: "item", id: key.slice(2) };
 }
 
-export function testFileOf(model: Model, f: FileNode): FileNode | undefined {
-  const t = model.fileByPath.get(f.path.replace(/\.go$/, "_test.go"));
-  return t && t.status !== "removed" ? t : undefined;
-}
-
-/** A changed (not removed) source file without a same-name _test.go. */
-export function lacksTest(model: Model, f: FileNode): boolean {
-  return !f.isTest && f.status !== "unchanged" && f.status !== "removed" && !testFileOf(model, f);
-}
-
-/** Files referenced by the comment targets that currently lack a test (stored at creation). */
-export function noTestSnapshot(model: Model, targets: string[]): string[] {
-  const out: string[] = [];
-  for (const k of targets) {
-    const t = parseKey(k);
-    const id = t.kind === "item" ? t.id : t.from;
-    if (!id.startsWith("f:")) continue;
-    const f = model.fileByPath.get(pathOf(id));
-    if (f && lacksTest(model, f) && !out.includes(f.path)) out.push(f.path);
-  }
-  return out;
-}
-
-export function linkFor(model: Model, tree: Map<string, TreeDir>, from: string, to: string): PanelLink | null {
-  const s = resolveSource(model, tree, from, false);
-  if (!s) return null;
-  return sourceLinks(model, s, true).get(to)?.link ?? null;
-}
+export const linkFor = findLink;
 
 /**
  * Whether one target still needs attention after re-analysis:
- * a dependency that no longer exists, a file that is gone, or a file that got its
- * missing test counts as resolved.
+ * a dependency, file or folder that no longer exists counts as resolved.
  */
-export function targetState(model: Model, tree: Map<string, TreeDir>, c: ReviewComment, key: string): TargetState {
+export function targetState(model: Model, tree: Map<string, TreeDir>, key: string): TargetState {
   const t = parseKey(key);
   if (t.kind === "link") {
     const l = linkFor(model, tree, t.from, t.to);
@@ -79,15 +49,13 @@ export function targetState(model: Model, tree: Map<string, TreeDir>, c: ReviewC
   }
   if (t.id.startsWith("f:")) {
     const f = model.fileByPath.get(pathOf(t.id));
-    if (!f || f.status === "removed") return "resolved";
-    if (c.noTestAtCreation.includes(f.path) && testFileOf(model, f)) return "resolved";
-    return "open";
+    return !f || f.status === "removed" ? "resolved" : "open";
   }
   return tree.has(pathOf(t.id)) ? "open" : "resolved";
 }
 
 export function commentState(model: Model, tree: Map<string, TreeDir>, c: ReviewComment): CommentState {
-  const states = c.targets.map((k) => targetState(model, tree, c, k));
+  const states = c.targets.map((k) => targetState(model, tree, k));
   const done = states.filter((s) => s === "resolved").length;
   if (done === 0) return "open";
   return done === states.length ? "resolved" : "partial";
@@ -102,21 +70,36 @@ export function importPath(model: Model, dir: string): string {
 }
 
 function describeSource(model: Model, tree: Map<string, TreeDir>, id: string): string {
+  // a row of the panel's dependents column (who imports the shown item)
+  if (id.startsWith("i:")) {
+    const q = id.slice(4);
+    return id.startsWith("i:f:") ? q : id.startsWith("i:d:") ? `${q}/ 直下のファイル` : `${q}/ 配下`;
+  }
   const p = pathOf(id);
   if (id.startsWith("f:")) return p;
   if (id.startsWith("d:")) return `${p}/ 配下`;
+  if (id.startsWith("p:")) return `${p}/ 直下のファイル（パッケージ ${baseName(p)}）`;
   const d = tree.get(p);
   const n = d ? d.files.filter((f) => f.status === "unchanged").length : 0;
   return `${p}/ の変更のないファイル ${n} 個`;
 }
 
-function describeTarget(model: Model, id: string): string {
-  return id.startsWith("x:") ? `${id.slice(2)}（外部パッケージ）` : importPath(model, id.slice(2));
+function describeTarget(model: Model, id: string, l: PanelLink | null): string {
+  if (id.startsWith("x:")) return `${id.slice(2)}（外部パッケージ）`;
+  if (id.startsWith("t:")) return id.slice(2); // one file of a TS folder
+  const dir = id.slice(2);
+  // a folded group in the panel stands for everything below the folder
+  const name = id.startsWith("g:") ? `${importPath(model, dir)}/ 配下` : importPath(model, dir);
+  // TS knows the exact files; list them so an agent can open them directly
+  const files = (l?.files ?? []).filter((f) => f.status !== "removed").map((f) => f.path.slice(dir.length + 1));
+  if (!files.length) return name;
+  return id.startsWith("g:") ? `${name}（${files.join(", ")}）` : `${name}/（${files.join(", ")}）`;
 }
 
 function linkStatusText(l: PanelLink | null, fromId: string): string {
   if (!l || l.after === 0) return "現在は存在しない（解消済み？）";
-  if (fromId.startsWith("f:")) return l.status === "added" ? "今回追加した import" : "既存の import";
+  const typeOnly = l.typeOnly ? "、型のみ" : "";
+  if (fromId.startsWith("f:")) return (l.status === "added" ? "今回追加した import" : "既存の import") + typeOnly;
   const parts = [`import しているファイル 変更前 ${l.before} → 変更後 ${l.after}`];
   if (l.added) parts.push(`今回追加 ${l.added}`);
   if (l.removed) parts.push(`今回削除 ${l.removed}`);
@@ -158,7 +141,9 @@ export function formatPrompt(
       lines.push(links.length === 1 ? "依存:" : `依存（${links.length}件）:`);
       for (const t of links) {
         const l = linkFor(model, tree, t.from, t.to);
-        lines.push(`  - ${describeSource(model, tree, t.from)} → ${describeTarget(model, t.to)}（${linkStatusText(l, t.from)}）`);
+        // a dependent link points at a shown item, not at a package
+        const to = t.from.startsWith("i:") ? describeSource(model, tree, t.to) : describeTarget(model, t.to, l);
+        lines.push(`  - ${describeSource(model, tree, t.from)} → ${to}（${linkStatusText(l, t.from.replace(/^i:/, ""))}）`);
       }
     }
     if (items.length) {
@@ -172,7 +157,6 @@ export function formatPrompt(
           else {
             if (f.status === "added") notes.push("今回追加");
             if (f.status === "modified") notes.push("今回変更");
-            if (lacksTest(model, f)) notes.push("同じ名前の _test.go なし");
           }
           lines.push(`  - ファイル ${p}${notes.length ? `（${notes.join("、")}）` : ""}`);
         } else lines.push(`  - ${t.id.startsWith("d:") ? `フォルダ ${p}/` : describeSource(model, tree, t.id)}`);

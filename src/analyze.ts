@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { listFiles, mergeBase, readFiles, repoRoot, resolveRev, type Source } from "./git.js";
 import { isStdlib, parseGoImports, parseGoModModulePath } from "./go.js";
+import { buildTsProject, isTsFile, isTsTest, parseTsImports, resolveTsImport } from "./ts.js";
 import type { DiffGraph, Edge, FileNode, GoModule } from "./types.js";
 
 export interface CompareOptions {
@@ -13,20 +14,42 @@ export interface CompareOptions {
   mergeBase?: boolean;
 }
 
-interface Snapshot {
-  modules: GoModule[];
-  files: Map<string, { hash: string; lines: number; imports: { to: string; external: boolean }[] }>;
+interface SnapshotImport {
+  to: string;
+  external: boolean;
+  typeOnly?: boolean;
+  /** TS: imported files inside `to` */
+  files?: string[];
+  /** TS: the subset of `files` imported only with `import type` */
+  typeOnlyFiles?: string[];
 }
 
-const EXCLUDED_SEGMENTS = new Set(["vendor", "testdata", "node_modules", ".git"]);
+interface Snapshot {
+  modules: GoModule[];
+  files: Map<string, { hash: string; lines: number; imports: SnapshotImport[] }>;
+}
 
-function isRelevant(path: string): boolean {
+type FileKind = "go" | "gomod" | "ts" | "tsconfig" | "package";
+
+/** What a path is to the analysis (null = ignored). Exclusions differ per language. */
+export function fileKind(path: string): FileKind | null {
   const segs = path.split("/");
-  if (segs.some((s) => EXCLUDED_SEGMENTS.has(s) || (s.startsWith(".") && s.length > 1) || s.startsWith("_"))) {
-    return false;
-  }
   const name = segs[segs.length - 1];
-  return name === "go.mod" || name.endsWith(".go");
+  const hidden = segs.some((s) => s === "node_modules" || (s.startsWith(".") && s.length > 1));
+  if (hidden) return null;
+  if (name === "go.mod" || name.endsWith(".go")) {
+    // Go ignores vendor/, testdata/ and _-prefixed directories
+    if (segs.some((s) => s === "vendor" || s === "testdata" || s.startsWith("_"))) return null;
+    return name === "go.mod" ? "gomod" : "go";
+  }
+  if (/^(tsconfig[^/]*|jsconfig)\.json$/.test(name)) return "tsconfig";
+  if (name === "package.json") return "package";
+  if (isTsFile(name)) return "ts";
+  return null;
+}
+
+function countLines(c: string): number {
+  return c.length === 0 ? 0 : c.split("\n").length - (c.endsWith("\n") ? 1 : 0);
 }
 
 export async function resolveSources(
@@ -82,8 +105,14 @@ export async function resolveSources(
 }
 
 async function loadSnapshot(root: string, source: Source): Promise<Snapshot> {
-  const paths = (await listFiles(root, source)).filter(isRelevant);
-  const contents = await readFiles(root, source, paths);
+  const kinds = new Map<string, FileKind>();
+  for (const p of await listFiles(root, source)) {
+    const k = fileKind(p);
+    if (k) kinds.set(p, k);
+  }
+  const contents = await readFiles(root, source, [...kinds.keys()]);
+  // deleted in the working tree but still listed: drop
+  for (const p of [...kinds.keys()]) if (!contents.has(p)) kinds.delete(p);
 
   const modules: GoModule[] = [];
   for (const [p, c] of contents) {
@@ -107,11 +136,39 @@ async function loadSnapshot(root: string, source: Source): Promise<Snapshot> {
       seen.add(to);
       imports.push({ to, external: local === null });
     }
-    files.set(p, {
-      hash: createHash("sha1").update(c).digest("hex"),
-      lines: c.length === 0 ? 0 : c.split("\n").length - (c.endsWith("\n") ? 1 : 0),
-      imports,
-    });
+    files.set(p, { hash: createHash("sha1").update(c).digest("hex"), lines: countLines(c), imports });
+  }
+
+  // TypeScript / JavaScript
+  const tsFiles = new Set([...kinds].filter(([, k]) => k === "ts").map(([p]) => p));
+  if (tsFiles.size > 0) {
+    const pick = (kind: FileKind) => new Map([...kinds].filter(([, k]) => k === kind).map(([p]) => [p, contents.get(p)!]));
+    const project = buildTsProject(tsFiles, pick("tsconfig"), pick("package"));
+    for (const p of tsFiles) {
+      const c = contents.get(p)!;
+      // per target folder: imported files and whether each is imported for types only
+      const byTo = new Map<string, { external: boolean; typeOnly: boolean; files: Map<string, boolean> }>();
+      for (const imp of parseTsImports(c)) {
+        const res = resolveTsImport(project, p, imp.spec);
+        if (res.kind === "builtin" || res.kind === "unresolved") continue; // node built-ins, assets (css, svg), typos
+        const to = res.kind === "file" ? dirOf(res.path) : res.name;
+        let entry = byTo.get(to);
+        if (!entry) byTo.set(to, (entry = { external: res.kind === "external", typeOnly: true, files: new Map() }));
+        entry.typeOnly &&= imp.typeOnly;
+        if (res.kind === "file" && res.path !== p) entry.files.set(res.path, (entry.files.get(res.path) ?? true) && imp.typeOnly);
+      }
+      const imports: SnapshotImport[] = [];
+      for (const [to, e] of byTo) {
+        if (!e.external && e.files.size === 0) continue; // only imported itself
+        if (e.external) {
+          imports.push({ to, external: true, typeOnly: e.typeOnly });
+          continue;
+        }
+        const typeOnlyFiles = [...e.files].filter(([, t]) => t).map(([f]) => f);
+        imports.push({ to, external: false, typeOnly: e.typeOnly, files: [...e.files.keys()].sort(), ...(typeOnlyFiles.length ? { typeOnlyFiles } : {}) });
+      }
+      files.set(p, { hash: createHash("sha1").update(c).digest("hex"), lines: countLines(c), imports });
+    }
   }
   return { modules, files };
 }
@@ -146,7 +203,7 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): { files: FileN
       status,
       linesBefore: b?.lines ?? null,
       linesAfter: a?.lines ?? null,
-      isTest: path.endsWith("_test.go"),
+      isTest: path.endsWith("_test.go") || (isTsFile(path) && isTsTest(path)),
     });
 
     const bImports = new Map((b?.imports ?? []).map((i) => [i.to, i]));
@@ -154,12 +211,26 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): { files: FileN
     for (const to of new Set([...bImports.keys(), ...aImports.keys()])) {
       const ai = aImports.get(to);
       const bi = bImports.get(to);
-      edges.push({
+      const edge: Edge = {
         from: path,
         to,
         external: (ai ?? bi)!.external,
         status: ai && bi ? "unchanged" : ai ? "added" : "removed",
-      });
+      };
+      const typeOnly = (ai ?? bi)!.typeOnly;
+      if (typeOnly !== undefined) edge.typeOnly = typeOnly;
+      if (ai?.files || bi?.files) {
+        const bf = new Set(bi?.files ?? []);
+        const af = new Set(ai?.files ?? []);
+        const typeOnlyAfter = new Set(ai?.typeOnlyFiles ?? []);
+        const typeOnlyBefore = new Set(bi?.typeOnlyFiles ?? []);
+        edge.files = [...new Set([...bf, ...af])].sort().map((f) => {
+          const status: Edge["status"] = af.has(f) && bf.has(f) ? "unchanged" : af.has(f) ? "added" : "removed";
+          const typeOnly = af.has(f) ? typeOnlyAfter.has(f) : typeOnlyBefore.has(f);
+          return typeOnly ? { path: f, status, typeOnly } : { path: f, status };
+        });
+      }
+      edges.push(edge);
     }
   }
 

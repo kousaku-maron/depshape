@@ -138,7 +138,7 @@ export const CommentSidebar = forwardRef<HTMLTextAreaElement, CommentSidebarProp
                   </div>
                   <ul className="comment-targets" onClick={() => props.onShow(c)} title="クリックで図に表示">
                     {c.targets.map((k) => (
-                      <li key={k} className={targetState(model, tree, c, k) === "resolved" ? "resolved" : ""}>
+                      <li key={k} className={targetState(model, tree, k) === "resolved" ? "resolved" : ""}>
                         {keyLabel(model, tree, k)}
                       </li>
                     ))}
