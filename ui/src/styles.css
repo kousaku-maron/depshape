@@ -303,6 +303,8 @@ main {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  /* keep each column to the window's height so it scrolls inside instead of growing */
+  grid-template-rows: minmax(0, 1fr);
 }
 @media (max-width: 1100px) {
   main {
@@ -413,8 +415,7 @@ main {
 }
 .tdot.removed,
 .tbadge.removed,
-.tmark.removed,
-.tmark.notest {
+.tmark.removed {
   color: var(--removed);
 }
 .tbadge {
@@ -446,6 +447,11 @@ main {
 .tbtn.on {
   opacity: 1;
 }
+/* keeps rows aligned where a row has no eye button ("ほか N" rows) */
+.tbtn-space {
+  flex: none;
+  width: 20px;
+}
 .tbtn:hover {
   color: var(--accent);
 }
@@ -455,6 +461,8 @@ main {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   background: var(--bg);
 }
 .dep-panel-head {
@@ -482,6 +490,7 @@ main {
 }
 .dep-panel-scroll {
   flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 .panel-svg {
@@ -523,9 +532,53 @@ main {
 .pnode.target:hover rect {
   fill: var(--bg-hover);
 }
+/* target folders that open to the files imported from them (TS) */
+/* the open/fold toggle's hit area: never styled like the box it sits in (pinned outline, status fill) */
+.panel-svg .pnode .pchev rect,
+.panel-svg .pnode:hover .pchev rect {
+  fill: transparent;
+  stroke: none;
+}
+.pchev text {
+  fill: var(--muted);
+  font-size: 10px;
+}
+.pchev:hover text {
+  fill: var(--text);
+}
+.pnode.open > rect {
+  stroke-dasharray: 3 3;
+}
+/* rows opened from a pinned folder: part of that pin, not pins of their own */
+.pnode.source.child > rect {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.pnode.target.file > rect {
+  rx: 4px;
+}
+.pnode.target.f-added > rect {
+  fill: var(--added-bg);
+}
+.pnode.target.f-modified > rect {
+  fill: var(--modified-bg);
+}
 .plabel {
   fill: var(--text);
   font-size: 12px;
+}
+/* column titles when the dependents column is shown */
+.ptitle text {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+/* path labels: faint folders, the name stands out */
+.plabel .pdir {
+  fill: var(--muted);
+}
+.plabel .pname {
+  font-weight: 600;
 }
 .pnone {
   fill: var(--muted);
@@ -538,7 +591,9 @@ main {
 .pbtn {
   cursor: pointer;
 }
-.pbtn rect {
+/* the eye button: no outline or status fill from the box it sits in, just a light background on hover */
+.panel-svg .pnode .pbtn rect,
+.panel-svg .pnode:hover .pbtn rect {
   fill: transparent;
   stroke: none;
 }
@@ -546,7 +601,7 @@ main {
   fill: var(--muted);
   font-size: 12px;
 }
-.pbtn:hover rect {
+.panel-svg .pnode .pbtn:hover rect {
   fill: var(--bg-hover);
 }
 .panel-svg .medge {
@@ -910,4 +965,10 @@ button.primary:disabled {
 }
 .panel-svg.selecting.hovering .plink.active .medge {
   opacity: 1;
+}
+
+/* TS: type-only imports are erased at runtime, so draw them dotted */
+.panel-svg .medge.typeonly {
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
 }

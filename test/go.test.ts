@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffSnapshots } from "../src/analyze.js";
+import { diffSnapshots, fileKind } from "../src/analyze.js";
 import { isStdlib, parseGoImports, parseGoModModulePath } from "../src/go.js";
 
 describe("parseGoImports", () => {
@@ -88,5 +88,42 @@ describe("diffSnapshots", () => {
       ["app/handler/notice.go", "app/repo", "added"],
       ["app/handler/old.go", "app/repo", "removed"],
     ]);
+  });
+});
+
+describe("diffSnapshots with TS file detail", () => {
+  it("keeps one edge per folder and tracks which files inside it were added or dropped", () => {
+    const snap = (imports: { to: string; external: boolean; files?: string[]; typeOnly?: boolean; typeOnlyFiles?: string[] }[]) => ({
+      modules: [],
+      files: new Map([["web/page.tsx", { hash: JSON.stringify(imports), lines: 1, imports }]]),
+    });
+    const before = snap([{ to: "web/lib", external: false, files: ["web/lib/a.ts", "web/lib/b.ts"], typeOnly: false }]);
+    const after = snap([
+      { to: "web/lib", external: false, files: ["web/lib/b.ts", "web/lib/c.ts"], typeOnly: false, typeOnlyFiles: ["web/lib/c.ts"] },
+      { to: "react", external: true, typeOnly: false },
+    ]);
+    const { edges } = diffSnapshots(before, after);
+    const lib = edges.find((e) => e.to === "web/lib")!;
+    expect(lib.status).toBe("unchanged");
+    expect(lib.files).toEqual([
+      { path: "web/lib/a.ts", status: "removed" },
+      { path: "web/lib/b.ts", status: "unchanged" },
+      { path: "web/lib/c.ts", status: "added", typeOnly: true },
+    ]);
+    expect(edges.find((e) => e.to === "react")).toMatchObject({ external: true, status: "added" });
+  });
+});
+
+describe("fileKind", () => {
+  it("applies Go's exclusions to Go only, so Next.js folders like _components and (group) stay", () => {
+    expect(fileKind("pkg/_internal/x.go")).toBeNull();
+    expect(fileKind("vendor/a/b.go")).toBeNull();
+    expect(fileKind("web/src/app/_components/nav.tsx")).toBe("ts");
+    expect(fileKind("web/src/app/(market)/[item]/page.tsx")).toBe("ts");
+    expect(fileKind("web/node_modules/react/index.js")).toBeNull();
+    expect(fileKind("web/.next/server/app.js")).toBeNull();
+    expect(fileKind("web/tsconfig.json")).toBe("tsconfig");
+    expect(fileKind("web/package.json")).toBe("package");
+    expect(fileKind("web/vendor.min.js")).toBeNull();
   });
 });
