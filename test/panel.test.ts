@@ -33,9 +33,9 @@ const { byPath } = buildTree(model);
 describe("buildPanel", () => {
   it("draws pinned files and the union of what they import", () => {
     const p = buildPanel(model, byPath, ["f:src/a.go", "f:src/b.go", "f:src/c.go"], null, false);
-    // like the targets, the folder the pins share is shown once and each pin is labelled below it
-    expect(p.sourcePrefix).toBe("src");
-    expect(p.sources.map((s) => s.label)).toEqual(["a.go", "b.go", "c.go"]);
+    // shown files sit in a box for their folder, labelled by name
+    expect(p.sources.map((s) => `${"  ".repeat(s.depth)}${s.label}`)).toEqual(["src/", "  a.go", "  b.go", "  c.go"]);
+    expect(p.sources.map((s) => !!s.isPin)).toEqual([false, true, true, true]);
     expect(p.targets.map((t) => t.label)).toEqual(["hoge", "fuga"]);
     expect(p.targetPrefix).toBe("lib");
     expect(p.links.map((l) => `${l.from}>${l.to}:${l.status}`).sort()).toEqual([
@@ -49,8 +49,9 @@ describe("buildPanel", () => {
   it("adds the hovered item after the pins without pinning it", () => {
     const p = buildPanel(model, byPath, ["f:src/b.go"], "f:src/c.go", false);
     expect(p.sources.map((s) => [s.label, s.pinned])).toEqual([
+      ["src/", true],
       ["b.go", true],
-      ["c.go", false],
+      ["src/c.go", false],
     ]);
   });
 
@@ -246,7 +247,8 @@ describe("dependents (who imports the shown items)", () => {
     // lib/hoge is imported by src/a.go (new) and src/b.go (existing)
     const p = buildPanel(model, byPath, ["f:lib/hoge/h.go"], null, false);
     expect(p.dependents.map((d) => [d.id, d.label, d.fileCount, d.open])).toEqual([["i:d:src", "src", 2, false]]);
-    expect(p.inLinks.map((l) => `${l.from}>${l.to} ${l.before}→${l.after} +${l.added}`)).toEqual(["i:d:src>f:lib/hoge/h.go 1→2 +1"]);
+    // Go imports the package, so the link lands on the file's box, not on the file
+    expect(p.inLinks.map((l) => `${l.from}>${l.to} ${l.before}→${l.after} +${l.added}`)).toEqual(["i:d:src>c:lib/hoge 1→2 +1"]);
 
     const opened = buildPanel(model, byPath, ["f:lib/hoge/h.go"], null, false, new Map([["i:d:src", true]]));
     expect(opened.dependents.map((d) => `${"  ".repeat(d.depth)}${d.label}`)).toEqual(["src", "  a.go", "  b.go"]);
@@ -291,5 +293,76 @@ describe("dependents (who imports the shown items)", () => {
     expect(findLink(m, t, "i:f:web/app/page.tsx", "f:web/ui/card.tsx")).toMatchObject({ status: "added" });
     const { text } = formatPrompt(m, t, [{ id: "c", targets: [key], body: "x", createdAt: 0 }]);
     expect(text).toContain("web/app/page.tsx → web/ui/card.tsx（今回追加した import）");
+  });
+});
+
+describe("shown items in path order, grouped by folder", () => {
+  it("orders boxes and folders by path, and Go dependents link to each package box once", () => {
+    const g: DiffGraph = {
+      ...graph,
+      files: [
+        file("app/a/x.go", "added"),
+        file("app/a/y.go"),
+        file("app/b/z.go"),
+        file("app/b/w.go"),
+        file("cmd/main.go"),
+      ],
+      edges: [edge("cmd/main.go", "app/a"), edge("cmd/main.go", "app/b", "added")],
+    };
+    const m = buildModel(g);
+    const t = buildTree(m).byPath;
+    // pinned in a mixed order: a, b, b, a
+    const p = buildPanel(m, t, ["f:app/a/x.go", "f:app/b/z.go", "f:app/b/w.go", "f:app/a/y.go"], null, false);
+    expect(p.sources.map((s) => `${"  ".repeat(s.depth)}${s.label}`)).toEqual(["a/", "  x.go", "  y.go", "b/", "  w.go", "  z.go"]);
+    expect(p.inLinks.map((l) => `${l.from}>${l.to}:${l.status}`).sort()).toEqual(["i:d:cmd>c:app/a:unchanged", "i:d:cmd>c:app/b:added"]);
+    const { text } = formatPrompt(m, t, [{ id: "c", targets: [linkKey("i:d:cmd", "c:app/b")], body: "x", createdAt: 0 }]);
+    expect(text).toContain("cmd/ 直下のファイル → パッケージ app/b/（import しているファイル 変更前 0 → 変更後 1、今回追加 1）");
+  });
+});
+
+describe("a folded box", () => {
+  it("draws one link per target for its shown files, carrying each file's key", () => {
+    const m = buildModel(graph);
+    const t = buildTree(m).byPath;
+    const pins = ["f:src/a.go", "f:src/b.go", "f:src/c.go"];
+    const p = buildPanel(m, t, pins, null, false, new Map(), new Map([["c:src", false]]));
+    expect(p.sources.map((s) => `${s.label}${s.suffix ?? ""}`)).toEqual(["src/ 3 ファイル"]);
+    const byTo = new Map(p.links.map((l) => [l.to, l]));
+    expect([...byTo.keys()].sort()).toEqual(["d:lib/fuga", "d:lib/hoge"]);
+    expect(byTo.get("d:lib/hoge")).toMatchObject({ from: "c:src", after: 2, keys: [linkKey("f:src/a.go", "d:lib/hoge"), linkKey("f:src/b.go", "d:lib/hoge")] });
+    expect(byTo.get("d:lib/fuga")?.keys).toEqual([linkKey("f:src/a.go", "d:lib/fuga"), linkKey("f:src/c.go", "d:lib/fuga")]);
+    // open (the default) it is the box with its files, each drawing its own links
+    const open = buildPanel(m, t, pins, null, false);
+    expect(open.sources.map((s) => s.label)).toEqual(["src/", "a.go", "b.go", "c.go"]);
+    expect(open.links.every((l) => l.from.startsWith("f:") && !l.keys)).toBe(true);
+  });
+
+  it("TS: who imports its files links to the folded box once", () => {
+    const g: DiffGraph = {
+      ...graph,
+      files: [file("web/ui/a.ts"), file("web/ui/b.ts"), file("web/ui/c.ts"), file("web/app/page.ts")],
+      edges: [
+        {
+          ...edge("web/app/page.ts", "web/ui"),
+          files: [
+            { path: "web/ui/a.ts", status: "unchanged" },
+            { path: "web/ui/b.ts", status: "added" },
+          ],
+        },
+      ],
+    };
+    const m = buildModel(g);
+    const t = buildTree(m).byPath;
+    const pins = ["f:web/ui/a.ts", "f:web/ui/b.ts", "f:web/ui/c.ts"];
+    const open = buildPanel(m, t, pins, null, false);
+    expect(open.inLinks.map((l) => l.to).sort()).toEqual(["f:web/ui/a.ts", "f:web/ui/b.ts"]);
+    const p = buildPanel(m, t, pins, null, false, new Map(), new Map([["c:web/ui", false]]));
+    expect(p.inLinks).toHaveLength(1);
+    expect(p.inLinks[0]).toMatchObject({
+      to: "c:web/ui",
+      before: 1,
+      after: 1,
+      keys: [linkKey(p.inLinks[0].from, "f:web/ui/a.ts"), linkKey(p.inLinks[0].from, "f:web/ui/b.ts")],
+    });
   });
 });

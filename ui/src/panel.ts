@@ -10,6 +10,9 @@ import { baseName, dirStatus, folderEdgeStatus, parentDir, shortDir, type Model,
  *   d:<dir>    a folder, i.e. every file under it (imports inside the folder are skipped)
  *   r:<dir>    the unchanged files directly in a folder (the tree's "ほか N ファイル" row)
  *   p:<dir>    the files directly in a folder, i.e. one Go package (pinned from a package row)
+ *   c:<dir>    the box that groups shown files of one folder (not a pin of its own); for Go it is the
+ *              package, so who imports the package links to the box rather than to each file.
+ *              Folded, it stands for its shown files: one link per target, carrying its files' keys
  *
  * Targets are laid out as a folder tree, like dependency-cruiser's folder clusters:
  *   g:<dir>    a folder grouping imported folders below it; folded, it stands for all of them
@@ -27,7 +30,7 @@ import { baseName, dirStatus, folderEdgeStatus, parentDir, shortDir, type Model,
 
 export interface PanelSource {
   id: string;
-  kind: "file" | "dir" | "rest" | "package";
+  kind: "file" | "dir" | "rest" | "package" | "container";
   label: string;
   /** repo-relative path shown on hover */
   path: string;
@@ -41,9 +44,11 @@ export interface PanelSource {
   /** nesting level: rows opened from a folder sit under it */
   depth: number;
   parent?: string;
-  /** folders (and "変更のない N ファイル" rows) open in place into what they stand for */
+  /** folders open in place into what they stand for */
   canOpen?: boolean;
   open?: boolean;
+  /** an item the user pinned (gets the eye button); rows opened from a folder and boxes are not */
+  isPin?: boolean;
 }
 
 export interface PanelTarget {
@@ -88,6 +93,11 @@ export interface PanelLink {
   typeOnly?: boolean;
   /** TS: the exact files imported in the target (status across all sources of the link) */
   files?: { path: string; status: EdgeStatus; typeOnly?: boolean }[];
+  /**
+   * A folded box draws one link for the links of its files; these are their comment keys
+   * (L:<from>><to>), so selecting the drawn link selects (and comments on) each of them.
+   */
+  keys?: string[];
 }
 
 export const fileTargetId = (path: string) => `t:${path}`;
@@ -142,6 +152,11 @@ export function resolveSource(model: Model, tree: Map<string, TreeDir>, id: stri
     if (!d) return null;
     const files = d.files.filter((f) => f.status === "unchanged");
     return { id, kind: "rest", label: `${d.name}/`, suffix: ` のほか ${files.length} ファイル`, path, status: "unchanged", files, pinned, depth: 0 };
+  }
+  if (id.startsWith("c:")) {
+    const d = tree.get(path);
+    if (!d) return null;
+    return { id, kind: "container", label: `${d.name}/`, path, status: "unchanged", files: d.files, pinned, depth: 0 };
   }
   if (id.startsWith("p:")) {
     const d = tree.get(path);
@@ -352,8 +367,10 @@ function dependentMatch(id: string): (file: string) => boolean {
 
 export function findLink(model: Model, tree: Map<string, TreeDir>, from: string, to: string): PanelLink | null {
   if (from.startsWith("i:")) {
-    const src = resolveSource(model, tree, to, false);
-    if (!src) return null;
+    const found = resolveSource(model, tree, to, false);
+    if (!found) return null;
+    // a box stands for its Go package
+    const src = found.kind === "container" ? { ...found, files: found.files.filter((f) => f.path.endsWith(".go")) } : found;
     const match = dependentMatch(from);
     return dependentLink(from, to, [...dependentFiles(model, src)].filter(([f]) => match(f)).map(([, v]) => v));
   }
@@ -416,8 +433,8 @@ export function buildPanel(
   targetOpen: ReadonlyMap<string, boolean> = new Map(),
   sourceOpen: ReadonlyMap<string, boolean> = new Map(),
 ): PanelData {
-  const ids = hovered && !pins.includes(hovered) ? [...pins, hovered] : pins;
-  // pins in pin order; an opened folder is followed by what it opens into (each item shown once)
+  // pins in path order, like the tree; shown files sit in a box per folder; an opened folder is followed
+  // by what it opens into; the hovered item comes last (each item shown once)
   const sources: PanelSource[] = [];
   const seen = new Set<string>();
   const addSource = (s: PanelSource, depth: number, parent: string | undefined) => {
@@ -428,18 +445,57 @@ export function buildPanel(
     sources.push(s);
     if (s.open) for (const k of kids) addSource(k, depth + 1, s.id);
   };
-  for (const id of ids) {
-    const s = resolveSource(model, tree, id, pins.includes(id));
+  const pinned = pins.map((id) => resolveSource(model, tree, id, true)).filter((s): s is PanelSource => s !== null);
+  for (const s of pinned) s.isPin = true;
+  const filesByDir = new Map<string, PanelSource[]>();
+  /** boxes: their shown files, and every file of the folder (for Go, the package) */
+  const boxes = new Map<string, { files: PanelSource[]; pkg: FileNode[] }>();
+  for (const s of pinned)
+    if (s.kind === "file") filesByDir.set(parentDir(s.path), [...(filesByDir.get(parentDir(s.path)) ?? []), s]);
+  const tops = [
+    ...pinned.filter((s) => s.kind !== "file").map((s) => ({ key: `${s.path}/`, box: false, s, dir: s.path })),
+    ...[...filesByDir.keys()].map((dir) => ({ key: dir ? `${dir}/` : "", box: true, s: null, dir })),
+  ].sort((a, b) => a.key.localeCompare(b.key) || Number(a.box) - Number(b.box));
+  for (const t of tops) {
+    if (!t.box) {
+      addSource(t.s!, 0, undefined);
+      continue;
+    }
+    // files already shown inside an opened folder are not repeated in a box
+    const files = filesByDir.get(t.dir)!.filter((f) => !seen.has(f.id)).sort((a, b) => a.path.localeCompare(b.path));
+    const box = files.length ? resolveSource(model, tree, `c:${t.dir}`, true) : null;
+    if (!box) continue;
+    // the box stands for the shown files only (the package's other files are not part of it)
+    const pkg = box.files;
+    box.files = files.flatMap((f) => f.files);
+    const stats = { added: 0, modified: 0, removed: 0, total: box.files.length };
+    for (const f of box.files) if (f.status !== "unchanged") stats[f.status]++;
+    box.status = dirStatus(stats);
+    seen.add(box.id);
+    box.depth = 0;
+    box.canOpen = true;
+    box.open = sourceOpen.get(box.id) ?? true;
+    if (!box.open) box.suffix = ` ${files.length} ファイル`;
+    sources.push(box);
+    boxes.set(box.id, { files, pkg });
+    if (box.open)
+      for (const f of files) {
+        f.label = baseName(f.path);
+        addSource(f, 1, box.id);
+      }
+  }
+  if (hovered && !pins.includes(hovered)) {
+    const s = resolveSource(model, tree, hovered, false);
     if (s) addSource(s, 0, undefined);
   }
-  // like the targets: the folder all pins share is shown once, and each pin is labelled with its path below it
-  const tops = sources.filter((s) => s.depth === 0);
-  const sourcePrefix = commonParent(tops.map((s) => s.path));
-  for (const s of tops) {
+  // like the targets: the folder all rows share is shown once, and each row is labelled with its path below it
+  const topRows = sources.filter((s) => s.depth === 0);
+  const sourcePrefix = commonParent(topRows.map((s) => s.path));
+  for (const s of topRows) {
     const p = sourcePrefix ? s.path.slice(sourcePrefix.length + 1) : s.path;
-    s.label = s.kind === "dir" || s.kind === "rest" ? `${p}/` : p;
+    s.label = s.kind === "dir" || s.kind === "rest" || s.kind === "container" ? `${p}/` : p;
   }
-  // an opened row draws nothing itself: its links come from the rows under it
+  // an opened row (or box) draws nothing itself: its links come from the rows under it
   const bySource = sources.map((s) => (s.open ? new Map<string, SourceLink>() : sourceLinks(model, s, includeExternal)));
 
   const internal = new Set<string>();
@@ -563,8 +619,75 @@ export function buildPanel(
       if (l) links.push(l);
     }
   }
+  // a folded box's link stands for its files' links: carry their keys
+  const reaches = (m: Map<string, SourceLink>, tid: string) =>
+    tid.startsWith("t:")
+      ? !!m.get(`d:${parentDir(tid.slice(2))}`)?.fileLinks.has(tid)
+      : tid.startsWith("g:")
+        ? [...m.keys()].some((k) => k.startsWith("d:") && within(k.slice(2), tid.slice(2)))
+        : m.has(tid);
+  const perFile = new Map<string, Map<string, SourceLink>>();
+  const fileLinksOf = (f: PanelSource) => {
+    let m = perFile.get(f.id);
+    if (!m) perFile.set(f.id, (m = sourceLinks(model, f, includeExternal)));
+    return m;
+  };
+  for (const l of links) {
+    const box = boxes.get(l.from);
+    if (box) l.keys = box.files.filter((f) => reaches(fileLinksOf(f), l.to)).map((f) => `L:${f.id}>${l.to}`);
+  }
+
   // ---- dependents: who imports the sources, as a folder tree like the targets ----
-  const depBy = sources.map((s) => (s.open ? new Map<string, DependentFile>() : dependentFiles(model, s)));
+  // Go imports a package, not a file: who imports a boxed Go file links to its box (the package) once
+  const isGo = (p: string) => p.endsWith(".go");
+  const boxedGo = (s: PanelSource) => s.kind === "file" && !!s.parent?.startsWith("c:") && isGo(s.path);
+  /** who imports a box's Go package */
+  const goDepsOf = new Map<string, Map<string, DependentFile>>();
+  const goDeps = (s: PanelSource) => {
+    let m = goDepsOf.get(s.id);
+    if (m) return m;
+    const box = boxes.get(s.id)!;
+    const go = box.pkg.filter((f) => isGo(f.path));
+    m = box.files.some((f) => isGo(f.path)) && go.length ? dependentFiles(model, { ...s, files: go }) : new Map<string, DependentFile>();
+    goDepsOf.set(s.id, m);
+    return m;
+  };
+  const tsOf = (s: PanelSource) => boxes.get(s.id)!.files.filter((f) => !isGo(f.path));
+  const depBy = sources.map((s) => {
+    if (boxedGo(s)) return new Map<string, DependentFile>();
+    if (s.kind === "container") {
+      // open: Go importers arrive at the box, TS ones at each file; folded: everything arrives at the box
+      const go = goDeps(s);
+      if (s.open) return go;
+      const ts = dependentFiles(model, { ...s, files: tsOf(s).flatMap((f) => f.files) });
+      for (const [f, v] of go) {
+        const prev = ts.get(f);
+        if (!prev) ts.set(f, { ...v });
+        else {
+          prev.before ||= v.before;
+          prev.after ||= v.after;
+          prev.typeOnly &&= v.typeOnly;
+        }
+      }
+      return ts;
+    }
+    if (s.open) return new Map<string, DependentFile>();
+    return dependentFiles(model, s);
+  });
+  // a folded box's incoming link stands for the links to its TS files (and to the box, its Go package)
+  const depPerFile = new Map<string, Map<string, DependentFile>>();
+  const depKeys = (rowId: string, s: PanelSource): string[] | undefined => {
+    if (s.kind !== "container" || s.open) return undefined;
+    const match = dependentMatch(rowId);
+    const own = `L:${rowId}>${s.id}`;
+    const out = [...goDeps(s).keys()].some(match) ? [own] : [];
+    for (const f of tsOf(s)) {
+      let m = depPerFile.get(f.id);
+      if (!m) depPerFile.set(f.id, (m = dependentFiles(model, f)));
+      if ([...m.keys()].some(match)) out.push(`L:${rowId}>${f.id}`);
+    }
+    return out.length === 1 && out[0] === own ? undefined : out;
+  };
   const importers = new Set(depBy.flatMap((m) => [...m.keys()]));
   const depDirs = new Set([...importers].map(parentDir));
   const dependentPrefix = commonParent([...depDirs]);
@@ -585,7 +708,10 @@ export function buildPanel(
     const match = dependentMatch(rowId);
     sources.forEach((s, i) => {
       const l = dependentLink(rowId, s.id, [...depBy[i]].filter(([f]) => match(f)).map(([, v]) => v));
-      if (l) inLinks.push(l);
+      if (!l) return;
+      const keys = depKeys(rowId, s);
+      if (keys) l.keys = keys;
+      inLinks.push(l);
     });
   };
   const dependents: PanelTarget[] = [];

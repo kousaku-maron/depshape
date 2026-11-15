@@ -79,6 +79,7 @@ function describeSource(model: Model, tree: Map<string, TreeDir>, id: string): s
   if (id.startsWith("f:")) return p;
   if (id.startsWith("d:")) return `${p}/ 配下`;
   if (id.startsWith("p:")) return `${p}/ 直下のファイル（パッケージ ${baseName(p)}）`;
+  if (id.startsWith("c:")) return `パッケージ ${p}/`;
   const d = tree.get(p);
   const n = d ? d.files.filter((f) => f.status === "unchanged").length : 0;
   return `${p}/ の変更のないファイル ${n} 個`;

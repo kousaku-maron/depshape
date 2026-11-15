@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { CommentSidebar, type Draft } from "./CommentViews";
 import { commentState, itemKey, parseKey, type ReviewComment } from "./comments";
 import { DepPanel } from "./DepPanel";
-import { EyeIcon } from "./icons";
+import { PinIcon } from "./icons";
+import { unhide } from "./hide";
+import { clampLayout, DEFAULT_SIDE, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { parentDir, type Model, type TreeDir } from "./model";
 import { buildAllView, buildChangesView, type MapMode, type View, type ViewNode } from "./view";
 
@@ -79,6 +81,18 @@ export function DepMap(props: DepMapProps) {
   const [hovered, setHovered] = useState<string | null>(null);
   const clearTimer = useRef<number | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // area widths: dragged on the dividers, saved for next time
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState<Layout>(loadLayout);
+  const [bodyW, setBodyW] = useState(0);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBodyW(el.clientWidth));
+    ro.observe(el);
+    setBodyW(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
   const anchor = useRef<{ id: string; top: number } | null>(null);
 
   const openKey = useMemo(() => [...open].sort().join("|"), [open]);
@@ -96,12 +110,14 @@ export function DepMap(props: DepMapProps) {
   // source folders opened in the panel
   const [sourceOpen, setSourceOpen] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const toggleSource = (id: string, open: boolean) => setSourceOpen((prev) => new Map(prev).set(id, open));
+  // panel rows whose lines are set aside for now (not saved)
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
 
   // ---- comments: what is selected, the draft being written, and two-way highlighting ----
   const [selection, setSelection] = useState<string[]>([]);
   const [draft, setDraft] = useState<Draft>({ editingId: null, body: "" });
   const [litKeys, setLitKeys] = useState<Set<string> | null>(null); // a comment card under the mouse
-  const [hoveredKey, setHoveredKey] = useState<string | null>(null); // a commented link under the mouse
+  const [hoveredKeys, setHoveredKeys] = useState<string[] | null>(null); // the link under the mouse (a folded box's link: several)
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const selected = useMemo(() => new Set(selection), [selection]);
   const { comments, sidebarOpen, onSidebarOpen } = props;
@@ -176,7 +192,24 @@ export function DepMap(props: DepMapProps) {
   const showComment = (c: ReviewComment) => {
     const links = c.targets.map(parseKey).flatMap((t) => (t.kind === "link" ? [t] : []));
     // a dependent link (from the left column) ends at the shown item; others start at it
-    props.onPin(links.map((t) => (t.from.startsWith("i:") ? t.to : t.from)));
+    // (a box is not a pin: it shows up with the files pinned in its folder)
+    const shown = links.map((t) => (t.from.startsWith("i:") ? t.to : t.from));
+    // a commented line set aside is drawn again
+    setHidden((prev) => {
+      let next = new Set(prev);
+      for (const t of links) {
+        const inbound = t.from.startsWith("i:");
+        next = unhide(unhide(next, inbound ? "I" : "S", t.from), inbound ? "S" : "T", t.to);
+      }
+      return next;
+    });
+    props.onPin(shown.filter((id) => !id.startsWith("c:")));
+    // and open the boxes those files sit in, so each commented link is drawn
+    setSourceOpen((prev) => {
+      const next = new Map(prev);
+      for (const id of shown) if (id.startsWith("f:")) next.set(`c:${parentDir(id.slice(2))}`, true);
+      return next;
+    });
     // unfold the panel's trees down to each commented dependency
     setTargetOpen((prev) => {
       const next = new Map(prev);
@@ -332,9 +365,9 @@ export function DepMap(props: DepMapProps) {
           <button
             className={`tbtn tpin${isPinned ? " on" : ""}`}
             onClick={stop(() => props.onTogglePin(n.id))}
-            title={isPinned ? "右のパネルに表示中（クリックで非表示）" : "右のパネルに表示し続ける"}
+            title={isPinned ? "パネルにピン留め中（クリックでピン留めを外す）" : "パネルにピン留めする（表示し続ける）"}
           >
-            <EyeIcon on={isPinned} />
+            <PinIcon on={isPinned} />
           </button>
         )}
       </div>
@@ -385,10 +418,21 @@ export function DepMap(props: DepMapProps) {
           </>
         )}
       </div>
-      <div className={`map-body${sidebarOpen ? " with-sidebar" : ""}`}>
+      <div
+        className={`map-body${sidebarOpen ? " with-sidebar" : ""}`}
+        ref={bodyRef}
+        style={{ gridTemplateColumns: gridColumns(bodyW ? clampLayout(layout, bodyW, sidebarOpen) : layout, sidebarOpen) }}
+      >
         <div className="map-scroll tree" ref={scrollRef} onMouseLeave={releaseHover}>
           {renderNodes(view.roots)}
         </div>
+        <Divider
+          title="ドラッグでツリーとパネルの幅を変える（ダブルクリックで元に戻す）"
+          start={() => scrollRef.current?.getBoundingClientRect().width ?? 0}
+          onDrag={(w0, dx) => setLayout((l) => clampLayout({ ...l, tree: w0 + dx }, bodyW, sidebarOpen))}
+          onEnd={() => setLayout((l) => (saveLayout(l), l))}
+          onReset={() => setLayout((l) => (saveLayout({ ...l, tree: undefined }), { ...l, tree: undefined }))}
+        />
         <DepPanel
           model={model}
           tree={tree}
@@ -401,12 +445,23 @@ export function DepMap(props: DepMapProps) {
           litKeys={litKeys}
           commentCounts={commentCounts}
           onSelectKeys={selectKeys}
-          onHoverKey={setHoveredKey}
+          onHoverKey={setHoveredKeys}
           targetOpen={targetOpen}
           sourceOpen={sourceOpen}
           onToggleSource={toggleSource}
           onToggleTarget={toggleTarget}
+          hidden={hidden}
+          onHiddenChange={setHidden}
         />
+        {sidebarOpen && (
+          <Divider
+            title="ドラッグでコメントの幅を変える（ダブルクリックで元に戻す）"
+            start={() => clampLayout(layout, bodyW, true).side}
+            onDrag={(w0, dx) => setLayout((l) => clampLayout({ ...l, side: w0 - dx }, bodyW, true))}
+            onEnd={() => setLayout((l) => (saveLayout(l), l))}
+            onReset={() => setLayout((l) => (saveLayout({ ...l, side: DEFAULT_SIDE }), { ...l, side: DEFAULT_SIDE }))}
+          />
+        )}
         {sidebarOpen && (
           <CommentSidebar
             ref={inputRef}
@@ -426,17 +481,52 @@ export function DepMap(props: DepMapProps) {
               props.onCommentsChange(comments.filter((c) => c.id !== id));
               if (draft.editingId === id) resetDraft();
             }}
-            hoveredKey={hoveredKey}
+            hoveredKeys={hoveredKeys}
             onHoverComment={(keys) => setLitKeys(keys ? new Set(keys) : null)}
           />
         )}
       </div>
       <div className="legend">
         <span className="muted">
-          行にホバーすると右のパネルに依存先が出ます ・ 目のアイコンで表示し続け、複数並べて比べられます ・ 矢印や箱のクリック（⌘ / Shift で複数）・行の 💬 でコメント（c キーで入力欄へ）・ 「+n 依存」= 今回増えた import ・
+          行にホバーすると右のパネルに依存先が出ます ・ ピンのアイコンでピン留めし、複数並べて比べられます ・ 矢印や箱のクリック（⌘ / Shift で複数）・行の 💬 でコメント（c キーで入力欄へ）・ 「+n 依存」= 今回増えた import ・
           {mode === "changes" ? " 「ほか N ファイル」= 変更のない既存ファイル（クリックで展開）" : " フォルダをクリックで開閉"}
         </span>
       </div>
     </div>
+  );
+}
+
+/** A draggable line between two areas: `start` reads the width being changed, `onDrag` gets it plus the move. */
+function Divider(props: { title: string; start: () => number; onDrag: (w0: number, dx: number) => void; onEnd: () => void; onReset: () => void }) {
+  return (
+    <div
+      className="area-divider"
+      role="separator"
+      aria-orientation="vertical"
+      title={props.title}
+      onDoubleClick={props.onReset}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const el = e.currentTarget;
+        const x0 = e.clientX;
+        const w0 = props.start();
+        el.setPointerCapture(e.pointerId);
+        el.classList.add("dragging");
+        document.body.classList.add("resizing");
+        const move = (ev: PointerEvent) => props.onDrag(w0, ev.clientX - x0);
+        const up = () => {
+          el.removeEventListener("pointermove", move);
+          el.removeEventListener("pointerup", up);
+          el.removeEventListener("pointercancel", up);
+          el.classList.remove("dragging");
+          document.body.classList.remove("resizing");
+          props.onEnd();
+        };
+        el.addEventListener("pointermove", move);
+        el.addEventListener("pointerup", up);
+        el.addEventListener("pointercancel", up);
+      }}
+    />
   );
 }

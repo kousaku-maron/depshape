@@ -1,4 +1,4 @@
-/* Eye / eye-off outlines. Works inside HTML and inside another <svg>. */
+/* Eye / eye-off outlines (Feather) and a push pin. Work inside HTML and inside another <svg>. */
 
 /*!
  * Icon paths from Feather (https://github.com/feathericons/feather)
@@ -51,6 +51,30 @@ export function EyeIcon({ on, size = 14, x, y }: { on: boolean; size?: number; x
           <line x1="1" y1="1" x2="23" y2="23" />
         </>
       )}
+    </svg>
+  );
+}
+
+/* A push pin (drawn for depshape, in the same line style): filled when pinned. */
+export function PinIcon({ on, size = 14, x, y }: { on: boolean; size?: number; x?: number; y?: number }) {
+  return (
+    <svg
+      className={`pin-icon${on ? " on" : ""}`}
+      x={x}
+      y={y}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 3h8" />
+      <path d="M9.5 3v6L6 14h12l-3.5-5V3z" fill={on ? "currentColor" : "none"} />
+      <path d="M12 14v7" />
     </svg>
   );
 }

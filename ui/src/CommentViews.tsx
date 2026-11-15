@@ -69,7 +69,7 @@ export interface CommentSidebarProps {
   onEdit: (c: ReviewComment) => void;
   onDelete: (id: string) => void;
   /** a link/row hovered on the map: its comments light up here */
-  hoveredKey: string | null;
+  hoveredKeys: string[] | null;
   /** the card under the mouse: its targets light up on the map */
   onHoverComment: (keys: string[] | null) => void;
 }
@@ -128,7 +128,7 @@ export const CommentSidebar = forwardRef<HTMLTextAreaElement, CommentSidebarProp
               {items.map(({ c, state }) => (
                 <article
                   key={c.id}
-                  className={`comment-card ${state}${props.hoveredKey && c.targets.includes(props.hoveredKey) ? " lit" : ""}${draft.editingId === c.id ? " editing" : ""}`}
+                  className={`comment-card ${state}${props.hoveredKeys?.some((k) => c.targets.includes(k)) ? " lit" : ""}${draft.editingId === c.id ? " editing" : ""}`}
                   onMouseEnter={() => props.onHoverComment(c.targets)}
                   onMouseLeave={() => props.onHoverComment(null)}
                 >
