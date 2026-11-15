@@ -32,11 +32,8 @@ export function App() {
   const [pins, setPins] = useState<string[] | null>(null);
   const [comments, setComments] = useState<ReviewComment[] | null>(null);
   const [mapMode, setMapMode] = useState<MapMode>(loadPref<MapMode>("mapMode", "changes"));
-  const [sidebarOpen, setSidebarOpenState] = useState(loadPref<string>("commentSidebar", "0") === "1");
-  const setSidebarOpen = useCallback((v: boolean) => {
-    setSidebarOpenState(v);
-    savePref("commentSidebar", v ? "1" : "0");
-  }, []);
+  // the comment sidebar starts closed every time; selecting a link or a row opens it
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [copyNote, setCopyNote] = useState<string | null>(null);
 
   const load = useCallback(async (refresh: boolean) => {

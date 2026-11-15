@@ -1,6 +1,6 @@
 {
   "name": "@kousaku-maron/depshape",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Visualize how a git diff changes folder/file dependencies (Go, TypeScript, JavaScript), side by side with existing siblings",
   "keywords": [
     "dependency",

@@ -326,7 +326,6 @@ main {
   padding: 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
-  border-right: 1px solid var(--border);
 }
 .tgroup {
   border: 1px solid var(--border);
@@ -549,6 +548,16 @@ main {
 .pnode.open > rect {
   stroke-dasharray: 3 3;
 }
+/* the box grouping shown files of one folder (for Go, the package) */
+.pnode.source.container > rect {
+  fill: transparent;
+  stroke: var(--border);
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+.pnode.source.container .pname {
+  fill: var(--muted);
+}
 /* rows opened from a pinned folder: part of that pin, not pins of their own */
 .pnode.source.child > rect {
   stroke: var(--border);
@@ -641,16 +650,17 @@ main {
   border-color: transparent;
   margin: 0;
 }
-.eye {
+.eye,
+.pin-icon {
   display: block;
 }
-.tpin .eye,
-.pbtn .eye {
+.tpin .pin-icon,
+.pbtn .pin-icon {
   color: var(--muted);
 }
-.tpin.on .eye,
-.pbtn .eye.on,
-.pnode.target .eye {
+.tpin.on .pin-icon,
+.pbtn .pin-icon.on,
+.pnode.target .pin-icon {
   color: var(--accent);
 }
 
@@ -680,7 +690,7 @@ main {
 .pnode.target {
   cursor: pointer;
 }
-.pbtn.on .eye {
+.pbtn.on .pin-icon {
   color: var(--accent);
 }
 .trow.picked {
@@ -737,12 +747,48 @@ button.primary:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* the lines between the areas: drag to resize */
+.area-divider {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+.area-divider::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+}
+.area-divider:hover::after,
+.area-divider.dragging::after {
+  width: 3px;
+  background: var(--accent);
+}
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+@media (max-width: 1100px) {
+  /* stacked: no dividers, and the inline widths do not apply */
+  .map-body,
+  .map-body.with-sidebar {
+    grid-template-columns: 1fr !important;
+  }
+  .area-divider {
+    display: none;
+  }
+}
 .comment-sidebar {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border-left: 1px solid var(--border);
   background: var(--bg-soft);
 }
 .comment-sidebar .dep-panel-head {
@@ -971,4 +1017,44 @@ button.primary:disabled {
 .panel-svg .medge.typeonly {
   stroke-dasharray: 1 4;
   stroke-linecap: round;
+}
+
+/* panel rows whose lines are set aside (right-click menu) */
+.panel-svg .pnode.hid {
+  opacity: 0.35;
+}
+.panel-menu {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+}
+.panel-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.panel-menu button:hover:not(:disabled) {
+  background: var(--bg-soft);
+}
+.panel-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.panel-menu .eye {
+  color: var(--muted);
 }

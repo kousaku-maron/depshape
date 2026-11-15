@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { linkKey } from "./comments";
-import { EyeIcon } from "./icons";
+import { EyeIcon, PinIcon } from "./icons";
 import type { Model, TreeDir } from "./model";
 import { fitPath as fitPathWith } from "./labels";
+import { hideKey, isHidden, unhide, type Column } from "./hide";
 import { buildPanel, type PanelLink, type PanelSource, type PanelTarget } from "./panel";
 
 const CHAR_W = 7.3; // monospace 12px
@@ -92,7 +93,7 @@ export interface DepPanelProps {
   /** targets of the comment card under the mouse */
   litKeys: Set<string> | null;
   /** a link under the mouse (its comments light up in the sidebar) */
-  onHoverKey: (key: string | null) => void;
+  onHoverKey: (keys: string[] | null) => void;
   /** open comments per link key */
   commentCounts: Map<string, number>;
   /** select dependencies; additive = ⌘/Shift held (toggle into the selection) */
@@ -103,6 +104,9 @@ export interface DepPanelProps {
   /** source folders opened in place (all start folded) */
   sourceOpen: ReadonlyMap<string, boolean>;
   onToggleSource: (id: string, open: boolean) => void;
+  /** rows whose lines are set aside for now (see hide.ts): faded, their links not drawn */
+  hidden: ReadonlySet<string>;
+  onHiddenChange: (next: Set<string>) => void;
 }
 
 const additive = (e: MouseEvent) => e.metaKey || e.ctrlKey || e.shiftKey;
@@ -131,14 +135,47 @@ export function DepPanel(props: DepPanelProps) {
     t.open ? "" : t.kind === "group" ? ` ${groupContents(t)}` : t.fileCount ? ` ${t.fileCount} ファイル` : "";
   const [focus, setFocus] = useState<string | null>(null);
 
+  // rows set aside by the user: they stay in place, faded, and their links are not drawn (nor selected)
+  const hid = useMemo(() => {
+    const of = (col: Column, rows: { id: string }[]) =>
+      new Set(props.hidden.size ? rows.filter((r) => isHidden(props.hidden, col, r.id)).map((r) => r.id) : []);
+    return { S: of("S", data.sources), T: of("T", data.targets), I: of("I", data.dependents) };
+  }, [data, props.hidden]);
+  const links = useMemo(() => data.links.filter((l) => !hid.S.has(l.from) && !hid.T.has(l.to)), [data, hid]);
+  const inLinks = useMemo(() => data.inLinks.filter((l) => !hid.I.has(l.from) && !hid.S.has(l.to)), [data, hid]);
+  const [menu, setMenu] = useState<{ x: number; y: number; col: Column; id: string } | null>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("blur", close);
+    };
+  }, [menu]);
+  const openMenu = (col: Column, id: string) => (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ x: e.clientX, y: e.clientY, col, id });
+  };
+
   /** links leaving a source row (an opened folder's leave the rows under it) */
-  const outgoing = (id: string) => data.links.filter((l) => l.from === id || srcUnder(l.from, id));
-  const outCount = (s: PanelSource) => new Set(outgoing(s.id).map((l) => l.to)).size;
+  const outgoing = (id: string) => links.filter((l) => l.from === id || srcUnder(l.from, id));
+  // "依存なし" is a fact: hidden lines still count
+  const outCount = (s: PanelSource) => new Set(data.links.filter((l) => l.from === s.id || srcUnder(l.from, s.id)).map((l) => l.to)).size;
   /** links arriving at a target row (an opened folder's arrive at its files) */
-  const incoming = (id: string) => data.links.filter((l) => l.to === id || tgtUnder(l.to, id));
+  const incoming = (id: string) => links.filter((l) => l.to === id || tgtUnder(l.to, id));
   /** links leaving a dependent row */
-  const depOutgoing = (id: string) => data.inLinks.filter((l) => l.from === id || depUnder(l.from, id));
-  const keys = (ls: PanelLink[]) => ls.map((l) => linkKey(l.from, l.to));
+  const depOutgoing = (id: string) => inLinks.filter((l) => l.from === id || depUnder(l.from, id));
+  /** comment keys behind drawn links (a folded box's link stands for its files' links) */
+  const keysOf = (l: PanelLink) => l.keys ?? [linkKey(l.from, l.to)];
+  const keys = (ls: PanelLink[]) => [...new Set(ls.flatMap(keysOf))];
 
   // fit the drawing to the panel's width: the gaps and the columns share it
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -195,7 +232,7 @@ export function DepPanel(props: DepPanelProps) {
     return l.from === focus || srcUnder(l.from, focus) || l.to === focus || tgtUnder(l.to, focus);
   };
   // while some drawn link is selected, the others fade so the selection stands out
-  const selecting = [...data.links, ...data.inLinks].some((l) => props.selection.has(linkKey(l.from, l.to)));
+  const selecting = [...links, ...inLinks].some((l) => keysOf(l).some((k) => props.selection.has(k)));
   const order = { unchanged: 0, removed: 1, added: 2 } as const;
   const byStatus = (ls: PanelLink[]) => [...ls].sort((a, b) => order[a.status] - order[b.status]);
   const abs = (p: string) => (p ? `${model.graph.repoRoot}/${p}` : model.graph.repoRoot);
@@ -226,10 +263,10 @@ export function DepPanel(props: DepPanelProps) {
   /** One drawn dependency: a Bézier from (x1,y1) to (x2,y2) with its selection, comment and count marks. */
   const linkPath = (l: PanelLink, x1: number, y1: number, x2: number, y2: number, inbound: boolean, title: string, countAt: number | null) => {
     const c = COL_GAP / 2;
-    const key = linkKey(l.from, l.to);
-    const selected = props.selection.has(key);
-    const lit = props.litKeys?.has(key) ?? false;
-    const comments = props.commentCounts.get(key) ?? 0;
+    const ks = keysOf(l);
+    const selected = ks.length > 0 && ks.every((k) => props.selection.has(k));
+    const lit = ks.some((k) => props.litKeys?.has(k));
+    const comments = ks.reduce((n, k) => n + (props.commentCounts.get(k) ?? 0), 0);
     const active = isActive(l, inbound);
     const d = `M${x1},${y1} C${x1 + c},${y1} ${x2 - c},${y2} ${x2},${y2}`;
     const at = (t: number) => [bez(t, x1, x1 + c, x2 - c, x2), bez(t, y1, y1, y2, y2)] as const;
@@ -237,8 +274,8 @@ export function DepPanel(props: DepPanelProps) {
       <g
         key={`${l.from}>${l.to}`}
         className={`plink${active || lit ? " active" : ""}${selected ? " selected" : ""}`}
-        onClick={(e) => props.onSelectKeys([key], additive(e))}
-        onMouseEnter={() => props.onHoverKey(key)}
+        onClick={(e) => props.onSelectKeys(ks, additive(e))}
+        onMouseEnter={() => props.onHoverKey(ks)}
         onMouseLeave={() => props.onHoverKey(null)}
       >
         {(selected || lit) && <path d={d} className={lit ? "psel lit" : "psel"} style={{ strokeWidth: linkWidth(l) + 7 }} />}
@@ -311,12 +348,13 @@ export function DepPanel(props: DepPanelProps) {
     return (
       <g
         key={t.id}
-        className={`pnode target ${t.kind}${isDep ? " dependent" : ""}${t.self ? " self" : ""}${t.open ? " open" : ""}${allNew ? " new" : ""}${pinned ? " pinned" : ""}${fileStatus && fileStatus !== "unchanged" ? ` f-${fileStatus}` : ""}`}
+        className={`pnode target ${t.kind}${isDep ? " dependent" : ""}${(isDep ? hid.I : hid.T).has(t.id) ? " hid" : ""}${t.self ? " self" : ""}${t.open ? " open" : ""}${allNew ? " new" : ""}${pinned ? " pinned" : ""}${fileStatus && fileStatus !== "unchanged" ? ` f-${fileStatus}` : ""}`}
         onMouseEnter={() => setFocus(t.id)}
         onMouseLeave={() => setFocus(null)}
         onClick={(e) => props.onSelectKeys(keys(ls), additive(e))}
+        onContextMenu={openMenu(isDep ? "I" : "T", t.id)}
       >
-        <title>{`${what}\nクリックで${clickWhat}をすべて選択${openHint}`}</title>
+        <title>{`${what}\nクリックで${clickWhat}をすべて選択${openHint}\n右クリックで線を非表示 / 表示`}</title>
         <rect x={x} y={y} width={w} height={ROW_H} rx={6} />
         {t.canOpen && (
           <g
@@ -348,9 +386,9 @@ export function DepPanel(props: DepPanelProps) {
               props.onTogglePin(pinId);
             }}
           >
-            <title>{pinned ? "真ん中にも表示中（クリックで非表示）" : "真ん中にも表示して、この先の依存をたどる"}</title>
+            <title>{pinned ? "ピン留め中（クリックでピン留めを外す）" : "ピン留めして、この先の依存をたどる"}</title>
             <rect x={x + w - 26} y={y + 4} width={20} height={ROW_H - 8} rx={4} />
-            <EyeIcon on={pinned} x={x + w - 23} y={y + ROW_H / 2 - 7} />
+            <PinIcon on={pinned} x={x + w - 23} y={y + ROW_H / 2 - 7} />
           </g>
         )}
       </g>
@@ -370,19 +408,19 @@ export function DepPanel(props: DepPanelProps) {
       <div className="dep-panel-head">
         <strong>依存の可視化</strong>
         <span className="muted">
-          {pins.length ? `表示中 ${pins.length}` : ""}
+          {pins.length ? `ピン留め ${pins.length}` : ""}
           {hovered ? `${pins.length ? " ＋ " : ""}ホバー中 1` : ""}
         </span>
         <span className="tspacer" />
         <button onClick={props.onClearPins} disabled={pins.length === 0}>
-          すべて非表示
+          ピンをすべて外す
         </button>
       </div>
       {data.sources.length === 0 ? (
         <div className="dep-panel-empty">
           左のツリーの行にホバーすると、ここに表示され、右に依存先（使っているもの）、左に依存元（使っている側）が出ます。
           <br />
-          目のアイコンで表示し続けられるので、複数並べて依存の形を比べられます。
+          ピンのアイコンでピン留めすると表示し続けるので、複数並べて依存の形を比べられます。
         </div>
       ) : (
         <div className="dep-panel-scroll" ref={scrollRef}>
@@ -415,7 +453,7 @@ export function DepPanel(props: DepPanelProps) {
                   依存元（使っている側）
                 </text>
                 <text x={srcX0} y={PAD + 10}>
-                  表示中
+                  ピン留め
                 </text>
                 <text x={tgtX} y={PAD + 10}>
                   依存先（使っているもの）
@@ -426,7 +464,7 @@ export function DepPanel(props: DepPanelProps) {
             {caption(data.sourcePrefix, srcX0, srcW)}
             {caption(data.targetPrefix, tgtX, tgtW)}
 
-            {byStatus(data.inLinks).map((l) => {
+            {byStatus(inLinks).map((l) => {
               const d = data.dependents.find((x) => x.id === l.from)!;
               const s = data.sources.find((x) => x.id === l.to)!;
               return linkPath(
@@ -441,7 +479,7 @@ export function DepPanel(props: DepPanelProps) {
                 d.kind !== "file" ? 0.2 : null,
               );
             })}
-            {byStatus(data.links).map((l) => {
+            {byStatus(links).map((l) => {
               const s = data.sources.find((x) => x.id === l.from)!;
               const t = data.targets.find((x) => x.id === l.to)!;
               return linkPath(
@@ -464,19 +502,28 @@ export function DepPanel(props: DepPanelProps) {
               const n = outCount(s);
               const x = srcX0 + indent(s);
               const w = srcW - indent(s);
+              const box = s.kind === "container";
               const none = n === 0 && !s.open;
-              const what = s.kind === "file" ? "" : `\n${s.files.length} ファイル`;
-              const openHint = s.canOpen ? (s.open ? "\n▾ でまとめる" : "\n▸ で開いて、中のフォルダ・ファイルごとに分ける") : "";
+              const what = box
+                ? `/\nピン留めした ${s.files.length} ファイルをまとめた箱（Go ではこの箱がパッケージで、依存元の線はここに届きます）`
+                : s.kind === "file"
+                  ? ""
+                  : `\n${s.files.length} ファイル`;
+              // a box's links are its files' links plus the ones arriving at it (its Go package)
+              const clickKeys = keys([...outgoing(s.id), ...(box ? inLinks.filter((l) => l.to === s.id) : [])]);
+              const splitWhat = box ? "ファイルごと" : "中のフォルダ・ファイルごと";
+              const openHint = s.canOpen ? (s.open ? "\n▾ でまとめる" : `\n▸ で開いて、${splitWhat}に分ける`) : "";
               return (
                 <g
                   key={s.id}
                   data-src={s.id}
-                  className={`pnode source ${s.kind} ${s.status}${s.pinned ? " pinned" : " temp"}${s.depth ? " child" : ""}${s.open ? " open" : ""}`}
+                  className={`pnode source ${s.kind} ${s.status}${hid.S.has(s.id) ? " hid" : ""}${s.pinned ? " pinned" : " temp"}${s.depth ? " child" : ""}${s.open ? " open" : ""}`}
                   onMouseEnter={() => setFocus(s.id)}
                   onMouseLeave={() => setFocus(null)}
-                  onClick={(e) => props.onSelectKeys(keys(outgoing(s.id)), additive(e))}
+                  onClick={(e) => props.onSelectKeys(clickKeys, additive(e))}
+                  onContextMenu={openMenu("S", s.id)}
                 >
-                  <title>{`${abs(s.path)}${what}\n依存先 ${n}\nクリックでここから出る依存をすべて選択${openHint}`}</title>
+                  <title>{`${abs(s.path)}${what}\n依存先 ${n}\nクリックで${box ? "この箱に出入りする" : "ここから出る"}依存をすべて選択${openHint}\n右クリックで線を非表示 / 表示`}</title>
                   <rect x={x} y={y} width={w} height={ROW_H} rx={6} />
                   {s.canOpen && (
                     <g
@@ -486,7 +533,7 @@ export function DepPanel(props: DepPanelProps) {
                         props.onToggleSource(s.id, !s.open);
                       }}
                     >
-                      <title>{s.open ? "まとめる" : "開いて、中のフォルダ・ファイルごとに分ける"}</title>
+                      <title>{s.open ? "まとめる" : `開いて、${splitWhat}に分ける`}</title>
                       <rect x={x} y={y} width={10 + srcChevW} height={ROW_H} />
                       <text x={x + 8} y={y + ROW_H / 2 + 4}>
                         {s.open ? "▾" : "▸"}
@@ -499,7 +546,7 @@ export function DepPanel(props: DepPanelProps) {
                     {none && <tspan className="pnone"> 依存なし</tspan>}
                   </text>
                   {/* a hovered row lasts only while the mouse is on the tree, so only pins get the button */}
-                  {s.depth === 0 && s.pinned && (
+                  {s.isPin && (
                     <g
                       className="pbtn"
                       onClick={(e) => {
@@ -507,9 +554,9 @@ export function DepPanel(props: DepPanelProps) {
                         props.onTogglePin(s.id);
                       }}
                     >
-                      <title>表示中（クリックで非表示）</title>
+                      <title>ピン留め中（クリックでピン留めを外す）</title>
                       <rect x={srcX0 + srcW - 26} y={y + 4} width={20} height={ROW_H - 8} rx={4} />
-                      <EyeIcon on={s.pinned} x={srcX0 + srcW - 23} y={y + ROW_H / 2 - 7} />
+                      <PinIcon on={s.pinned} x={srcX0 + srcW - 23} y={y + ROW_H / 2 - 7} />
                     </g>
                   )}
                 </g>
@@ -518,6 +565,36 @@ export function DepPanel(props: DepPanelProps) {
 
             {data.targets.map((t) => treeRow(t, "target"))}
           </svg>
+        </div>
+      )}
+      {menu && (
+        <div className="panel-menu" style={{ left: menu.x, top: menu.y }} role="menu" onPointerDown={(e) => e.stopPropagation()}>
+          {(() => {
+            const rowHidden = isHidden(props.hidden, menu.col, menu.id);
+            const act = (next: Set<string>) => () => {
+              props.onHiddenChange(next);
+              setMenu(null);
+            };
+            return (
+              <>
+                {rowHidden ? (
+                  <button role="menuitem" onClick={act(unhide(props.hidden, menu.col, menu.id))}>
+                    <EyeIcon on />
+                    表示
+                  </button>
+                ) : (
+                  <button role="menuitem" onClick={act(new Set([...props.hidden, hideKey(menu.col, menu.id)]))}>
+                    <EyeIcon on={false} />
+                    非表示
+                  </button>
+                )}
+                <button role="menuitem" disabled={props.hidden.size === 0} onClick={act(new Set())}>
+                  <EyeIcon on />
+                  すべて表示
+                </button>
+              </>
+            );
+          })()}
         </div>
       )}
     </div>
