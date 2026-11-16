@@ -1,0 +1,55 @@
+{
+  "name": "@kousaku-maron/dbshape",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Show how a git diff changes a PostgreSQL schema (tables, columns, constraints, foreign keys, CHECK values), read from the SQL files in the repo",
+  "keywords": [
+    "database",
+    "schema",
+    "diff",
+    "postgresql",
+    "code-review",
+    "review",
+    "atlas",
+    "cli"
+  ],
+  "homepage": "https://github.com/kousaku-maron/diffshape/tree/main/packages/dbshape#readme",
+  "bugs": {
+    "url": "https://github.com/kousaku-maron/diffshape/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kousaku-maron/diffshape.git",
+    "directory": "packages/dbshape"
+  },
+  "license": "MIT",
+  "author": "kousaku-maron",
+  "type": "module",
+  "bin": {
+    "dbshape": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/cli.js --external:libpg-query --log-level=warning",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "libpg-query": "18.2.2"
+  },
+  "devDependencies": {
+    "@diffshape/core": "workspace:*",
+    "@types/node": "^22.20.5",
+    "esbuild": "0.23.1",
+    "tsx": "4.19.2",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
+  }
+}
