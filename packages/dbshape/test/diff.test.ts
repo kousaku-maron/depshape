@@ -30,6 +30,15 @@ describe("diffSchemas", () => {
     expect(d.unchangedTables).toBe(3);
   });
 
+  it("does not report NOT NULL written out on a primary key or identity column", () => {
+    const before = `CREATE TABLE t (id uuid PRIMARY KEY, seq int GENERATED ALWAYS AS IDENTITY);`;
+    const d = diff(before, `CREATE TABLE t (id uuid NOT NULL PRIMARY KEY, seq int NOT NULL GENERATED ALWAYS AS IDENTITY);`);
+    expect(d.tables).toEqual([]);
+    // taking the key off makes the column nullable
+    const off = diff(before, `CREATE TABLE t (id uuid, seq int GENERATED ALWAYS AS IDENTITY);`);
+    expect(off.tables[0].columns.map((c) => [c.name, c.changed])).toEqual([["id", ["notNull"]]]);
+  });
+
   it("lists added, removed and modified tables", () => {
     const after = `
       CREATE TABLE billing.prices (id uuid PRIMARY KEY, tier text NOT NULL CHECK (tier IN ('basic', 'pro', 'team')));

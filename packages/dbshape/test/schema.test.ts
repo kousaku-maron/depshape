@@ -26,9 +26,24 @@ describe("tables", () => {
       { name: "amount", type: "numeric(12,2)", notNull: true, default: "0" },
       { name: "status", type: "varchar", notNull: true, default: "'draft'::varchar" },
       { name: "tags", type: "text[]", notNull: false },
-      { name: "seq", type: "integer", notNull: false, identity: "always" },
+      { name: "seq", type: "integer", notNull: true, identity: "always" },
       { name: "issued_at", type: "timestamptz", notNull: false, default: "CURRENT_TIMESTAMP" },
     ]);
+  });
+
+  it("treats primary key columns as NOT NULL, like PostgreSQL", () => {
+    const s = build(`
+      CREATE TABLE a (id uuid PRIMARY KEY, note text);
+      CREATE TABLE b (PRIMARY KEY (tenant_id, id), tenant_id uuid, id uuid, note text);
+      CREATE TABLE c (id uuid, note text);
+      ALTER TABLE c ADD CONSTRAINT c_pkey PRIMARY KEY (id);
+      ALTER TABLE c ADD COLUMN code text PRIMARY KEY;
+      ALTER TABLE c DROP CONSTRAINT c_pkey;`);
+    const nn = (t: string) => Object.fromEntries(s.tables.get(`public.${t}`)!.columns.map((c) => [c.view.name, c.view.notNull]));
+    expect(nn("a")).toEqual({ id: true, note: false });
+    expect(nn("b")).toEqual({ tenant_id: true, id: true, note: false });
+    // dropping the key keeps NOT NULL
+    expect(nn("c")).toEqual({ id: true, note: false, code: true });
   });
 
   it("uses the search_path for unqualified names", () => {

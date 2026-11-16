@@ -263,6 +263,13 @@ class FileReader {
       else if (el.Constraint) this.addConstraint(t, el.Constraint);
       else this.ignore(`CREATE TABLE の ${Object.keys(el)[0]}`);
     }
+    // a table-level PRIMARY KEY may name a column defined after it
+    for (const c of t.constraints) if (c.view.kind === "primary") this.setNotNull(t, c.view.columns);
+  }
+
+  /** PostgreSQL makes primary key columns NOT NULL even when the SQL doesn't say so. */
+  private setNotNull(t: Table, columns: string[]) {
+    for (const c of t.columns) if (columns.includes(c.view.name)) c.view.notNull = true;
   }
 
   private addColumn(t: Table, c: Node) {
@@ -300,6 +307,8 @@ class FileReader {
           break; // deferrable attributes, collations, ...
       }
     }
+    // identity columns are NOT NULL too
+    if (view.identity) view.notNull = true;
   }
 
   /** PostgreSQL's default name for an unnamed constraint */
@@ -371,6 +380,8 @@ class FileReader {
     const view: ConstraintView = { name, kind, columns, definition, ...(references && { references }), ...(values && { values }) };
     t.constraints = t.constraints.filter((x) => x.view.name !== name);
     t.constraints.push({ view, key, loc: this.at(c.location) });
+    // dropping the key later leaves the columns NOT NULL, as in PostgreSQL
+    if (kind === "primary") this.setNotNull(t, columns);
   }
 
   private alterTable(v: Node) {
