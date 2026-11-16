@@ -9,18 +9,27 @@ import { exprText, ident, nodeKey, str, typeKey, typeText, type Node } from "./s
  * same model. Each comparable part keeps a key (its parse tree without positions) next to its display.
  */
 
+/** Where a part is defined: file and 1-based line */
+export interface Loc {
+  file: string;
+  line: number;
+}
+
 export interface Column {
   view: ColumnView;
+  loc: Loc;
   key: { type: string; default?: string; generated?: string };
 }
 
 export interface Constraint {
   view: ConstraintView;
+  loc: Loc;
   key: string;
 }
 
 export interface Index {
   view: IndexView;
+  loc: Loc;
   key: string;
 }
 
@@ -28,6 +37,7 @@ export interface Table {
   schema: string;
   name: string;
   file: string;
+  loc: Loc;
   columns: Column[];
   constraints: Constraint[];
   indexes: Index[];
@@ -37,11 +47,13 @@ export interface Table {
 export interface EnumType {
   view: EnumView;
   file: string;
+  loc: Loc;
 }
 
 export interface Domain {
   view: DomainView;
   file: string;
+  loc: Loc;
   key: string;
 }
 
@@ -103,25 +115,77 @@ export function buildSchema(files: SqlFile[], parse: Parser): Schema {
       s.errors.set(f.path, e instanceof Error ? e.message : String(e));
       continue;
     }
-    new FileReader(s, f.path).run(tree);
+    new FileReader(s, f.path, f.sql).run(tree);
   }
   return s;
 }
 
+/**
+ * Byte offsets (what the parser reports) to 1-based lines. A statement's offset may point at the
+ * whitespace and comments before it, so those can be skipped.
+ */
+export class Lines {
+  private bytes: Uint8Array;
+  private breaks: number[] = [];
+
+  constructor(sql: string) {
+    this.bytes = new TextEncoder().encode(sql);
+    this.bytes.forEach((b, i) => b === 10 && this.breaks.push(i));
+  }
+
+  /** The line of a byte offset, after skipping whitespace and comments when `skip` is set */
+  lineAt(offset: number, skip = false): number {
+    const b = this.bytes;
+    let i = Math.max(0, offset);
+    while (skip && i < b.length) {
+      if (b[i] === 32 || b[i] === 9 || b[i] === 10 || b[i] === 13) i++;
+      else if (b[i] === 45 && b[i + 1] === 45) while (i < b.length && b[i] !== 10) i++;
+      else if (b[i] === 47 && b[i + 1] === 42) {
+        // a block comment: up to the next "*/"
+        let j = i + 2;
+        while (j < b.length && !(b[j] === 42 && b[j + 1] === 47)) j++;
+        i = j + 2;
+      } else break;
+    }
+    // number of line breaks before i
+    let lo = 0;
+    let hi = this.breaks.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.breaks[mid] < i) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo + 1;
+  }
+}
+
 class FileReader {
   private searchPath = "public";
+  private lines: Lines;
+  /** Where the current statement starts */
+  private here: Loc;
 
   constructor(
     private s: Schema,
     private file: string,
-  ) {}
+    sql: string,
+  ) {
+    this.lines = new Lines(sql);
+    this.here = { file, line: 1 };
+  }
 
   run(tree: Node) {
     for (const st of tree?.stmts ?? []) {
       const [kind, v] = Object.entries(st.stmt ?? {})[0] ?? [];
       if (!kind) continue;
+      this.here = { file: this.file, line: this.lines.lineAt(st.stmt_location ?? 0, true) };
       this.statement(kind, v);
     }
+  }
+
+  /** The location of a node inside the current statement (or the statement itself) */
+  private at(location: number | undefined): Loc {
+    return typeof location === "number" && location >= 0 ? { file: this.file, line: this.lines.lineAt(location) } : this.here;
   }
 
   private ignore(what: string) {
@@ -192,7 +256,7 @@ class FileReader {
       if (!v.if_not_exists) this.note(`テーブル ${key} が2回定義されています`);
       return;
     }
-    const t: Table = { schema, name, file: this.file, columns: [], constraints: [], indexes: [] };
+    const t: Table = { schema, name, file: this.file, loc: this.here, columns: [], constraints: [], indexes: [] };
     this.s.tables.set(key, t);
     for (const el of v.tableElts ?? []) {
       if (el.ColumnDef) this.addColumn(t, el.ColumnDef);
@@ -203,7 +267,7 @@ class FileReader {
 
   private addColumn(t: Table, c: Node) {
     const view: ColumnView = { name: c.colname, type: typeText(c.typeName), notNull: false };
-    const col: Column = { view, key: { type: typeKey(c.typeName) } };
+    const col: Column = { view, loc: this.at(c.location), key: { type: typeKey(c.typeName) } };
     t.columns = t.columns.filter((x) => x.view.name !== c.colname);
     t.columns.push(col);
     for (const k of c.constraints ?? []) {
@@ -306,7 +370,7 @@ class FileReader {
     const name = c.conname || this.defaultName(t, kind, columns);
     const view: ConstraintView = { name, kind, columns, definition, ...(references && { references }), ...(values && { values }) };
     t.constraints = t.constraints.filter((x) => x.view.name !== name);
-    t.constraints.push({ view, key });
+    t.constraints.push({ view, key, loc: this.at(c.location) });
   }
 
   private alterTable(v: Node) {
@@ -396,14 +460,14 @@ class FileReader {
       nnd: v.nulls_not_distinct,
     });
     t.indexes = t.indexes.filter((i) => i.view.name !== name);
-    t.indexes.push({ view, key });
+    t.indexes.push({ view, key, loc: this.here });
   }
 
   // ---- types
 
   private createEnum(v: Node) {
     const name = this.typeName(v.typeName);
-    this.s.enums.set(name, { view: { name, values: names(v.vals) }, file: this.file });
+    this.s.enums.set(name, { view: { name, values: names(v.vals) }, file: this.file, loc: this.here });
   }
 
   private alterEnum(v: Node) {
@@ -442,7 +506,7 @@ class FileReader {
       }
       keyParts.push({ ...c, location: undefined });
     }
-    this.s.domains.set(name, { view, file: this.file, key: nodeKey(keyParts) });
+    this.s.domains.set(name, { view, file: this.file, loc: this.here, key: nodeKey(keyParts) });
   }
 
   // ---- renames and comments
@@ -499,4 +563,21 @@ class FileReader {
     }
     this.ignore(`COMMENT ON ${String(v.objtype).replace("OBJECT_", "")}`);
   }
+}
+
+/**
+ * Where every table, column, constraint, index and type is defined, by the keys review comments use:
+ * "schema.table", "schema.table.column", "schema.table:constraint_or_index", "schema.type".
+ */
+export function schemaLocations(s: Schema): Map<string, Loc> {
+  const out = new Map<string, Loc>();
+  for (const [key, t] of s.tables) {
+    out.set(key, t.loc);
+    for (const c of t.columns) out.set(`${key}.${c.view.name}`, c.loc);
+    for (const c of t.constraints) out.set(`${key}:${c.view.name}`, c.loc);
+    for (const i of t.indexes) if (!out.has(`${key}:${i.view.name}`)) out.set(`${key}:${i.view.name}`, i.loc);
+  }
+  for (const [key, e] of s.enums) out.set(key, e.loc);
+  for (const [key, d] of s.domains) out.set(key, d.loc);
+  return out;
 }

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import { openBrowser } from "@diffshape/core";
 import { analyze, type AnalyzeOptions } from "./analyze.js";
 import { COLORS, PLAIN, formatSummary } from "./format.js";
+import { startServer } from "./server.js";
 
 const HELP = `dbshape - git の差分で PostgreSQL のスキーマ（テーブル・カラム・制約・外部キー・CHECK の値）がどう変わったかを見せます
 
@@ -19,8 +21,13 @@ compare-with:
 options:
   --merge-base       compare-with と target の分岐点を比較元にする（GitHub の PR と同じ見え方）
   --schema <glob>    スキーマの SQL ファイル（複数指定可）。省略時は atlas.hcl の src を読む
-  --json             差分を JSON で標準出力に出す
-  --no-color         色を付けない
+  --port <n>         ポート番号（デフォルト 4987、使用中なら +1）
+  --host <host>      待ち受けホスト（デフォルト 127.0.0.1。0.0.0.0 などにすると同じネットワークから
+                     スキーマが見えるので注意）
+  --no-open          ブラウザを自動で開かない
+  --text             サーバーを起動せず、差分の要約をターミナルに出す
+  --json             サーバーを起動せず、差分を JSON で標準出力に出す
+  --no-color         --text の出力に色を付けない
   -h, --help         このヘルプを表示
 
 例:
@@ -29,6 +36,10 @@ options:
 `;
 
 interface Args extends AnalyzeOptions {
+  port: number;
+  host: string;
+  open: boolean;
+  text: boolean;
   json: boolean;
   color: boolean;
 }
@@ -39,7 +50,7 @@ function fail(msg: string): never {
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { json: false, color: !!process.stdout.isTTY && !process.env.NO_COLOR, schema: [] };
+  const args: Args = { port: 4987, host: "127.0.0.1", open: true, text: false, json: false, color: !!process.stdout.isTTY && !process.env.NO_COLOR, schema: [] };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -53,6 +64,19 @@ function parseArgs(argv: string[]): Args {
         break;
       case "--schema":
         args.schema!.push(argv[++i] ?? fail("--schema には glob が必要です"));
+        break;
+      case "--port":
+        args.port = Number(argv[++i]);
+        if (!Number.isInteger(args.port)) fail("--port には数値を指定してください");
+        break;
+      case "--host":
+        args.host = argv[++i] ?? fail("--host には値が必要です");
+        break;
+      case "--no-open":
+        args.open = false;
+        break;
+      case "--text":
+        args.text = true;
         break;
       case "--json":
         args.json = true;
@@ -73,9 +97,16 @@ function parseArgs(argv: string[]): Args {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const result = await analyze(process.cwd(), args);
-  if (args.json) process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  else process.stdout.write(formatSummary(result, args.color ? COLORS : PLAIN));
+  const cwd = process.cwd();
+  if (args.json || args.text) {
+    const result = await analyze(cwd, args);
+    if (args.json) process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    else process.stdout.write(formatSummary(result, args.color ? COLORS : PLAIN));
+    return;
+  }
+  const { url } = await startServer(cwd, args, args.host, args.port);
+  process.stdout.write(`dbshape: ${url} で表示中（Ctrl+C で終了）\n`);
+  if (args.open) openBrowser(url);
 }
 
 main().catch((e) => {

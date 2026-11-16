@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { parser } from "../src/analyze.js";
-import { buildSchema, type Parser, type Schema } from "../src/schema.js";
+import { buildSchema, schemaLocations, type Parser, type Schema } from "../src/schema.js";
 
 let parse: Parser;
 beforeAll(async () => {
@@ -97,6 +97,11 @@ describe("tables", () => {
     ]);
   });
 
+  it("prints AND / OR without extra parentheses", () => {
+    const s = build(`CREATE TABLE t (a int, b int, c int, CONSTRAINT t_abc CHECK ((a >= 0) AND ((b > 0) OR (c > 0))));`);
+    expect(s.tables.get("public.t")!.constraints[0].view.definition).toBe("CHECK (a >= 0 AND (b > 0 OR c > 0))");
+  });
+
   it("reads table and column comments", () => {
     const s = build(`CREATE TABLE t (a int); COMMENT ON TABLE t IS 'things'; COMMENT ON COLUMN t.a IS 'count';`);
     const t = s.tables.get("public.t")!;
@@ -137,5 +142,36 @@ describe("types, errors and ignored statements", () => {
       GRANT SELECT ON t TO reader;
       ALTER TABLE t OWNER TO admin;`);
     expect(Object.fromEntries(s.ignored)).toEqual({ CreateExtension: 1, View: 1, Grant: 1, "ALTER TABLE ChangeOwner": 1 });
+  });
+});
+
+describe("locations", () => {
+  it("records the file and line of each part, skipping comments before a statement", () => {
+    const s = build(
+      `-- 請求まわり
+CREATE TABLE billing.invoices (
+  id uuid PRIMARY KEY,
+  /* メモ */
+  memo text,
+  CONSTRAINT invoices_memo_check CHECK (memo <> '')
+);
+
+/* block
+   comment */
+CREATE INDEX invoices_memo_idx ON billing.invoices (memo);
+CREATE TYPE billing.mood AS ENUM ('ok');`,
+      `ALTER TABLE billing.invoices ADD COLUMN price_id uuid;`,
+    );
+    const loc = Object.fromEntries([...schemaLocations(s)].map(([k, l]) => [k, `${l.file}:${l.line}`]));
+    expect(loc).toEqual({
+      "billing.invoices": "db/0.sql:2",
+      "billing.invoices.id": "db/0.sql:3",
+      "billing.invoices:invoices_pkey": "db/0.sql:3",
+      "billing.invoices.memo": "db/0.sql:5",
+      "billing.invoices:invoices_memo_check": "db/0.sql:6",
+      "billing.invoices:invoices_memo_idx": "db/0.sql:11",
+      "billing.mood": "db/0.sql:12",
+      "billing.invoices.price_id": "db/1.sql:1",
+    });
   });
 });

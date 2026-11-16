@@ -1,8 +1,9 @@
 import { listFiles, readFiles, resolveSources, type CompareOptions, type Source } from "@diffshape/core";
 import { loadModule, parseSync } from "libpg-query";
 import { diffSchemas } from "./diff.js";
-import type { DbShapeResult } from "./model.js";
-import { buildSchema, type Schema, type SqlFile } from "./schema.js";
+import { erTables } from "./er.js";
+import type { DbShapeResult, SourceLocation } from "./model.js";
+import { buildSchema, schemaLocations, type Schema, type SqlFile } from "./schema.js";
 import { atlasConfigs, atlasSources, expandSource, matchGlobs } from "./sources.js";
 
 export type { CompareOptions } from "@diffshape/core";
@@ -50,6 +51,14 @@ function ignoredList(s: Schema) {
   return [...s.ignored].map(([statement, count]) => ({ statement, count })).sort((a, b) => b.count - a.count || a.statement.localeCompare(b.statement));
 }
 
+/** Definition places on the target side, plus the base side for what was removed */
+export function locations(before: Schema, after: Schema): Record<string, SourceLocation> {
+  const out: Record<string, SourceLocation> = {};
+  for (const [k, l] of schemaLocations(after)) out[k] = { file: l.file, line: l.line };
+  for (const [k, l] of schemaLocations(before)) if (!(k in out)) out[k] = { file: l.file, line: l.line, base: true };
+  return out;
+}
+
 export async function analyze(cwd: string, opts: AnalyzeOptions): Promise<DbShapeResult> {
   const { root, target, base, targetLabel, baseLabel } = await resolveSources(cwd, opts);
   const [t, b] = await Promise.all([schemaFiles(root, target, opts), schemaFiles(root, base, opts)]);
@@ -67,6 +76,7 @@ export async function analyze(cwd: string, opts: AnalyzeOptions): Promise<DbShap
   const after = buildSchema(afterFiles, parse);
   const before = buildSchema(beforeFiles, parse);
 
+  const diff = diffSchemas(before, after);
   const warnings: string[] = [];
   for (const [side, s] of [["比較元", before], ["変更後", after]] as const) {
     for (const [file, err] of s.errors) warnings.push(`${side}の ${file} を解析できませんでした（このファイルのテーブルは比較から外しています）: ${err}`);
@@ -79,7 +89,9 @@ export async function analyze(cwd: string, opts: AnalyzeOptions): Promise<DbShap
     base: { label: baseLabel, files: beforeFiles.map((f) => f.path) },
     target: { label: targetLabel, files: afterFiles.map((f) => f.path) },
     schemaFrom: opts.schema?.length ? { kind: "option", patterns: opts.schema } : { kind: "atlas", configs: [...new Set([...t.configs, ...b.configs])] },
-    diff: diffSchemas(before, after),
+    diff,
+    er: erTables(before, after, diff),
+    locations: locations(before, after),
     ignored: ignoredList(after),
     warnings,
   };

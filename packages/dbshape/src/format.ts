@@ -23,8 +23,9 @@ function column(c: ColumnView): string {
   return parts.join(" ");
 }
 
-function index(i: IndexView): string {
-  return `${i.unique ? "UNIQUE " : ""}${i.method ? `USING ${i.method} ` : ""}(${i.columns.join(", ")})${i.include ? ` INCLUDE (${i.include.join(", ")})` : ""}${i.where ? ` WHERE ${i.where}` : ""}`;
+/** "UNIQUE INDEX USING gin (a, b) WHERE ..." */
+export function indexText(i: IndexView): string {
+  return `${i.unique ? "UNIQUE " : ""}INDEX ${i.method ? `USING ${i.method} ` : ""}(${i.columns.join(", ")})${i.include ? ` INCLUDE (${i.include.join(", ")})` : ""}${i.where ? ` WHERE ${i.where}` : ""}`;
 }
 
 const values = (v: string[]) => v.map((x) => `'${x}'`).join(", ");
@@ -52,9 +53,9 @@ function tableLines(t: TableChange, c: Colors): string[] {
   }
   for (const i of t.indexes) {
     const v = (i.after ?? i.before)!;
-    if (full) out.push(`      ${c.dim(`${v.name}: INDEX ${index(v)}`)}`);
-    else if (i.status === "modified") out.push(`    ${mark.modified} ${i.name}  ${c.dim(index(i.before!))} → ${index(i.after!)}`);
-    else out.push(`    ${mark[i.status]} ${i.name}  INDEX ${index(v)}`);
+    if (full) out.push(`      ${c.dim(`${v.name}: ${indexText(v)}`)}`);
+    else if (i.status === "modified") out.push(`    ${mark.modified} ${i.name}  ${c.dim(indexText(i.before!))} → ${indexText(i.after!)}`);
+    else out.push(`    ${mark[i.status]} ${i.name}  ${indexText(v)}`);
   }
   if (t.comment && !full) out.push(`    ${mark.modified} COMMENT  ${c.dim(t.comment.before ?? "(なし)")} → ${t.comment.after ?? "(なし)"}`);
   return out;

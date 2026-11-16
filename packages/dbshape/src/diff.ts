@@ -180,6 +180,11 @@ export function diffSchemas(before: Schema, after: Schema): SchemaDiff {
         constraints,
         indexes,
         ...(commentChanged && { comment: { before: b.comment, after: a.comment } }),
+        unchanged: {
+          columns: a.columns.filter((c) => !columns.some((x) => x.name === c.view.name)).map((c) => c.view),
+          constraints: a.constraints.filter((c) => !constraints.some((x) => x.name === c.view.name)).map((c) => c.view),
+          indexes: a.indexes.filter((i) => !indexes.some((x) => x.name === i.view.name)).map((i) => i.view),
+        },
       });
     } else {
       unchanged++;
