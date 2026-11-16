@@ -5,17 +5,89 @@ import { posix } from "node:path";
  * without running Atlas, or glob patterns given with --schema.
  */
 
-/** `file://` paths listed in the `src` attributes of an atlas.hcl, relative to the repo root. */
-export function atlasSources(configPath: string, content: string): string[] {
+/** An atlas.hcl without comments, so a commented-out src does not count */
+const stripComments = (content: string) => content.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"])(#|\/\/).*$/gm, "$1");
+
+/** `file://` paths in the `src` attributes of a piece of atlas.hcl, relative to the repo root. */
+function srcPaths(configPath: string, text: string): string[] {
   const dir = posix.dirname(configPath);
   const out: string[] = [];
-  // drop comments so a commented-out src does not count
-  const text = content.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"])(#|\/\/).*$/gm, "$1");
   for (const m of text.matchAll(/\bsrc\s*=\s*(\[[^\]]*\]|"[^"]*")/g)) {
     for (const f of m[1].matchAll(/"file:\/\/([^"]+)"/g)) {
-      const p = posix.normalize(posix.join(dir === "." ? "" : dir, f[1])).replace(/^\.\//, "").replace(/\/$/, "");
+      const p = posix
+        .normalize(posix.join(dir === "." ? "" : dir, f[1]))
+        .replace(/^\.\//, "")
+        .replace(/\/$/, "");
       if (!out.includes(p)) out.push(p);
     }
+  }
+  return out;
+}
+
+/** `file://` paths listed in the `src` attributes of an atlas.hcl (every env), relative to the repo root. */
+export function atlasSources(configPath: string, content: string): string[] {
+  return srcPaths(configPath, stripComments(content));
+}
+
+export interface AtlasEnv {
+  /** The env's name ("" for a src outside any env block) */
+  name: string;
+  sources: string[];
+}
+
+/** The `src` of each `env` block of an atlas.hcl (a src outside the env blocks counts as env ""). */
+export function atlasEnvs(configPath: string, content: string): AtlasEnv[] {
+  const text = stripComments(content);
+  const envs: AtlasEnv[] = [];
+  let outside = "";
+  let last = 0;
+  for (const m of text.matchAll(/\benv\s*(?:"([^"]*)"\s*)?\{/g)) {
+    const start = m.index!;
+    if (start < last) continue; // inside the previous block
+    // the block runs to its matching brace
+    let depth = 0;
+    let end = start + m[0].length - 1;
+    for (; end < text.length; end++) {
+      if (text[end] === "{") depth++;
+      else if (text[end] === "}" && --depth === 0) break;
+    }
+    outside += text.slice(last, start);
+    envs.push({ name: m[1] ?? "", sources: srcPaths(configPath, text.slice(start, end + 1)) });
+    last = end + 1;
+  }
+  outside += text.slice(last);
+  const top = srcPaths(configPath, outside);
+  if (top.length) envs.unshift({ name: "", sources: top });
+  return envs.filter((e) => e.sources.length > 0);
+}
+
+/**
+ * The databases one atlas.hcl describes: envs whose schema files overlap are the same database (dev /
+ * ci / prod usually share the src), envs with separate files are separate databases.
+ */
+export function atlasDatabases(configPath: string, content: string, files: string[]): { envs: string[]; files: string[] }[] {
+  const groups: { envs: string[]; files: string[] }[] = [];
+  for (const env of atlasEnvs(configPath, content)) {
+    const own: string[] = [];
+    for (const src of env.sources) for (const f of expandSource(src, files)) if (!own.includes(f)) own.push(f);
+    if (!own.length) continue;
+    // merge with every group that shares a file
+    const shared = groups.filter((g) => g.files.some((f) => own.includes(f)));
+    const merged = { envs: [...shared.flatMap((g) => g.envs), env.name], files: [...shared.flatMap((g) => g.files)] };
+    for (const f of own) if (!merged.files.includes(f)) merged.files.push(f);
+    for (const g of shared) groups.splice(groups.indexOf(g), 1);
+    groups.push(merged);
+  }
+  return groups;
+}
+
+/** `--schema name=glob` (or a plain glob, which goes to the unnamed database "") */
+export function schemaPatterns(patterns: string[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const p of patterns) {
+    const m = /^([\w.-]+)=(.+)$/.exec(p);
+    const [name, glob] = m ? [m[1], m[2]] : ["", p];
+    out.set(name, [...(out.get(name) ?? []), glob]);
   }
   return out;
 }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { analyze } from "../src/analyze.js";
-import { formatSummary } from "../src/format.js";
+import { formatRunSummary } from "../src/format.js";
 
 let repo: string;
 
@@ -35,8 +35,10 @@ afterAll(() => rmSync(repo, { recursive: true, force: true }));
 
 describe("analyze", () => {
   it("compares the working tree with HEAD using atlas.hcl", async () => {
-    const r = await analyze(repo, {});
-    expect(r.schemaFrom).toEqual({ kind: "atlas", configs: ["db/atlas.hcl"] });
+    const run = await analyze(repo, {});
+    expect(run.databases.map((d) => d.database)).toEqual([{ id: "db/atlas.hcl", name: "db" }]);
+    const r = run.databases[0];
+    expect(r.schemaFrom).toEqual({ kind: "atlas", configs: ["db/atlas.hcl"], envs: ["local"] });
     expect(r.target.files).toEqual(["db/sql/billing.sql", "db/sql/catalog/prices.sql", "db/sql/catalog/products.sql"]);
     expect(r.base.files).toEqual(["db/sql/billing.sql", "db/sql/catalog/products.sql"]);
     expect(r.diff.tables.map((t) => [t.name, t.status])).toEqual([
@@ -47,16 +49,39 @@ describe("analyze", () => {
     expect(r.diff.unchangedTables).toBe(1);
     expect(r.warnings).toEqual([]);
 
-    const text = formatSummary(r);
+    const text = formatRunSummary(run);
     expect(text).toContain("+ catalog.prices");
     expect(text).toContain("+ invoices_product_id_fkey  FOREIGN KEY (product_id) REFERENCES catalog.products (id)");
     expect(text).toContain("billing.invoices.status  +'void'");
   });
 
   it("takes --schema globs instead of atlas.hcl", async () => {
-    const r = await analyze(repo, { schema: ["db/sql/catalog/*.sql"] });
+    const r = (await analyze(repo, { schema: ["db/sql/catalog/*.sql"] })).databases[0];
     expect(r.schemaFrom).toEqual({ kind: "option", patterns: ["db/sql/catalog/*.sql"] });
     expect(r.diff.tables.map((t) => t.name)).toEqual(["catalog.prices"]);
+  });
+
+  it("compares each database of a monorepo on its own", async () => {
+    // a second service with its own atlas.hcl and a table of the same name as the first one's
+    write("services/catalog/db/atlas.hcl", `env "app" {\n  src = ["file://schema.sql"]\n}\n`);
+    write("services/catalog/db/schema.sql", `CREATE TABLE billing.invoices (id uuid PRIMARY KEY, note text);\n`);
+    try {
+      const run = await analyze(repo, {});
+      expect(run.databases.map((d) => [d.database.name, d.diff.tables.map((t) => `${t.name} ${t.status}`)])).toEqual([
+        ["db", ["billing.invoices modified", "catalog.prices added"]],
+        ["services/catalog/db", ["billing.invoices added"]],
+      ]);
+      expect(run.databases.flatMap((d) => d.warnings)).toEqual([]);
+      expect(formatRunSummary(run)).toContain("■ DB: services/catalog/db");
+      // named --schema globs are separate databases too
+      const named = await analyze(repo, { schema: ["billing=db/sql/*.sql", "catalog=services/catalog/db/*.sql"] });
+      expect(named.databases.map((d) => [d.database.id, d.target.files])).toEqual([
+        ["schema:billing", ["db/sql/billing.sql"]],
+        ["schema:catalog", ["services/catalog/db/schema.sql"]],
+      ]);
+    } finally {
+      rmSync(join(repo, "services"), { recursive: true, force: true });
+    }
   });
 
   it("says what to do when no schema file is found", async () => {

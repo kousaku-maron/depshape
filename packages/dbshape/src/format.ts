@@ -1,4 +1,5 @@
-import type { ColumnView, DbShapeResult, IndexView, TableChange, ValueChange } from "./model.js";
+import type { ColumnView, DbShapeResult, DbShapeRun, IndexView, TableChange, ValueChange } from "./model.js";
+import { schemaFromText } from "./names.js";
 
 /* The terminal summary (the default output until the browser view exists). */
 
@@ -73,15 +74,15 @@ function valueLine(v: ValueChange, c: Colors): string {
   return `  ${where}  ${what}${extra}`;
 }
 
-export function formatSummary(r: DbShapeResult, c: Colors = PLAIN): string {
+/** The summary of one database; with `header: false` the comparison line is left out */
+export function formatSummary(r: DbShapeResult, c: Colors = PLAIN, opts: { header?: boolean } = {}): string {
   const d = r.diff;
   const added = d.tables.filter((t) => t.status === "added");
   const modified = d.tables.filter((t) => t.status === "modified");
   const removed = d.tables.filter((t) => t.status === "removed");
   const out: string[] = [];
-  const from = r.schemaFrom.kind === "atlas" ? `${r.schemaFrom.configs.join(", ")} の src` : `--schema ${r.schemaFrom.patterns.join(" ")}`;
-  out.push(c.bold(`${r.target.label}  vs  ${r.base.label}`));
-  out.push(c.dim(`スキーマ: ${r.target.files.length} ファイル（${from}）、変更のないテーブル ${d.unchangedTables}`));
+  if (opts.header !== false) out.push(c.bold(`${r.target.label}  vs  ${r.base.label}`));
+  out.push(c.dim(`スキーマ: ${r.target.files.length} ファイル（${schemaFromText(r.schemaFrom)}）、変更のないテーブル ${d.unchangedTables}`));
   out.push("");
 
   const section = (title: string, items: TableChange[], mark: string) => {
@@ -115,4 +116,11 @@ export function formatSummary(r: DbShapeResult, c: Colors = PLAIN): string {
   }
   for (const w of r.warnings) out.push(c.mod(`注意: ${w}`));
   return out.join("\n").replace(/\n+$/, "") + "\n";
+}
+
+/** The summary of every database: one after another, each under its name when there are several */
+export function formatRunSummary(run: DbShapeRun, c: Colors = PLAIN): string {
+  if (run.databases.length === 1) return formatSummary(run.databases[0], c);
+  const parts = run.databases.map((d) => `${c.bold(`■ DB: ${d.database.name}`)}\n${formatSummary(d, c, { header: false })}`);
+  return `${c.bold(`${run.targetLabel}  vs  ${run.baseLabel}`)}\n\n${parts.join("\n")}`;
 }

@@ -188,13 +188,19 @@ export interface SideInfo {
   files: string[];
 }
 
+/** Where a database's schema files came from */
+export type SchemaFrom = { kind: "atlas"; configs: string[]; envs?: string[] } | { kind: "option"; patterns: string[] };
+
+/** One database (an atlas.hcl and its env, or a named --schema) compared on both sides */
 export interface DbShapeResult {
+  /** Stable id ("db/atlas.hcl", "db/atlas.hcl#app", "schema:billing") and a name for the screen */
+  database: { id: string; name: string };
   repoRoot: string;
   generatedAt: string;
   base: SideInfo;
   target: SideInfo;
   /** Where the schema files came from */
-  schemaFrom: { kind: "atlas"; configs: string[] } | { kind: "option"; patterns: string[] };
+  schemaFrom: SchemaFrom;
   diff: SchemaDiff;
   /** Tables for the ER diagram (all of them; the view picks which to show) */
   er: ErTable[];
@@ -207,4 +213,13 @@ export interface DbShapeResult {
   ignored: { statement: string; count: number }[];
   /** Files that could not be parsed (their tables are left out of the comparison) and other notes */
   warnings: string[];
+}
+
+/** Every database of the repository compared on both sides (a monorepo can have several) */
+export interface DbShapeRun {
+  repoRoot: string;
+  generatedAt: string;
+  targetLabel: string;
+  baseLabel: string;
+  databases: DbShapeResult[];
 }
