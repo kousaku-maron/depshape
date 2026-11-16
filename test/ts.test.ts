@@ -142,7 +142,8 @@ describe("helpers", () => {
   it("detects test files and package names", () => {
     expect(isTsTest("src/a.test.ts")).toBe(true);
     expect(isTsTest("src/a.spec.tsx")).toBe(true);
-    expect(isTsTest("src/__tests__/a.ts")).toBe(true);
+    expect(isTsTest("src/a.test.mts")).toBe(true);
+    expect(isTsTest("src/__tests__/a.ts")).toBe(false);
     expect(isTsTest("src/a.ts")).toBe(false);
     expect(packageName("@scope/pkg/deep/path")).toBe("@scope/pkg");
     expect(packageName("lodash/fp")).toBe("lodash");

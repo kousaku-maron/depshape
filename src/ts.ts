@@ -14,8 +14,9 @@ export function isTsFile(path: string): boolean {
   return TS_EXTS.some((e) => path.endsWith(e)) && !path.endsWith(".min.js");
 }
 
+/** A test file by the Vitest / Playwright default pattern: *.test.* / *.spec.* (not __tests__/ like Jest). */
 export function isTsTest(path: string): boolean {
-  return /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) || path.includes("/__tests__/");
+  return /\.(test|spec)\.[cm]?[jt]sx?$/.test(path);
 }
 
 export interface TsImport {
