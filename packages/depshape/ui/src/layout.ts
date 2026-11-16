@@ -1,3 +1,5 @@
+import { DIVIDER_W } from "@diffshape/ui";
+
 /*
  * Widths of the three areas (tree | panel | comment sidebar), set by dragging the dividers between them.
  * The tree and the sidebar have a width in px; the panel takes what is left. A missing tree width means
@@ -15,7 +17,6 @@ export const DEFAULT_SIDE = 340;
 export const MIN_TREE = 220;
 export const MIN_PANEL = 360;
 export const MIN_SIDE = 260;
-export const DIVIDER_W = 6;
 
 const KEY = "depshape.layout";
 
