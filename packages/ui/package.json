@@ -1,0 +1,22 @@
+{
+  "name": "@diffshape/ui",
+  "private": true,
+  "description": "Screen parts shared by the diffshape tools (colors, base styles, icons, small helpers). Bundled into each UI, not published.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./base.css": "./src/base.css"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "react": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "react": "18.3.1",
+    "typescript": "5.6.3"
+  }
+}

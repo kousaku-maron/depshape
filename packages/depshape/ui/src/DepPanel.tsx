@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { linkKey } from "./comments";
-import { EyeIcon, PinIcon } from "./icons";
+import { EyeIcon, PinIcon } from "@diffshape/ui";
 import type { Model, TreeDir } from "./model";
 import { fitPath as fitPathWith } from "./labels";
 import { hideKey, isHidden, unhide, type Column } from "./hide";

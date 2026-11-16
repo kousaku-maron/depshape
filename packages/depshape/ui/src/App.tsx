@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { DepMap } from "./DepMap";
 import type { MapMode } from "./view";
 import { commentState, formatPrompt, type ReviewComment } from "./comments";
-import { copyText } from "./CommentViews";
+import { copyText } from "@diffshape/ui";
 import type { DiffGraph, EdgeStatus, FileNode } from "../../src/types";
 import { ancestorsOf, buildModel, buildTree, outgoing, type Model } from "./model";
 

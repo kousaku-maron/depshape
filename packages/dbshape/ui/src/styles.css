@@ -1,61 +1,14 @@
-/* Colors match depshape so the two tools read the same way. */
+/* dbshape's own colors; the shared ones come from @diffshape/ui/base.css */
 :root {
-  --bg: #ffffff;
-  --bg-soft: #f6f8fa;
-  --bg-hover: #eef1f4;
-  --border: #d0d7de;
-  --text: #1f2328;
-  --muted: #656d76;
-  --accent: #0969da;
-  --accent-bg: #ddf4ff;
-  --added: #1a7f37;
-  --added-bg: #dafbe1;
-  --removed: #cf222e;
-  --removed-bg: #ffebe9;
-  --modified: #9a6700;
-  --modified-bg: #fff8c5;
   --values: #8250df;
   --values-bg: #fbefff;
-  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0d1117;
-    --bg-soft: #161b22;
-    --bg-hover: #1f2630;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8d96a0;
-    --accent: #4493f8;
-    --accent-bg: rgba(56, 139, 253, 0.16);
-    --added: #3fb950;
-    --added-bg: rgba(46, 160, 67, 0.18);
-    --removed: #f85149;
-    --removed-bg: rgba(248, 81, 73, 0.16);
-    --modified: #d29922;
-    --modified-bg: rgba(187, 128, 9, 0.18);
     --values: #ab7df8;
     --values-bg: rgba(171, 125, 248, 0.16);
-    color-scheme: dark;
   }
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-}
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
 }
 
 code,
@@ -69,11 +22,6 @@ ins,
 .file {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
-}
-
-button {
-  font: inherit;
-  color: inherit;
 }
 
 .muted {
