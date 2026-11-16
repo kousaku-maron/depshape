@@ -1,68 +1,24 @@
 {
-  "name": "@kousaku-maron/depshape",
-  "version": "0.3.0",
-  "description": "Visualize how a git diff changes folder/file dependencies (Go, TypeScript, JavaScript), side by side with existing siblings",
-  "keywords": [
-    "dependency",
-    "dependencies",
-    "diff",
-    "code-review",
-    "review",
-    "go",
-    "golang",
-    "visualization",
-    "cli",
-    "ai",
-    "typescript",
-    "javascript"
-  ],
-  "homepage": "https://github.com/kousaku-maron/diffshape/tree/main/packages/depshape#readme",
-  "bugs": {
-    "url": "https://github.com/kousaku-maron/diffshape/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/kousaku-maron/diffshape.git",
-    "directory": "packages/depshape"
-  },
+  "name": "@diffshape/depshape",
+  "private": true,
+  "description": "The depshape module of diffshape: how a git diff changes folder / file dependencies (Go, TypeScript, JavaScript). Bundled into the diffshape app, not published on its own.",
   "license": "MIT",
-  "author": "kousaku-maron",
   "type": "module",
-  "bin": {
-    "depshape": "dist/cli.js"
-  },
-  "files": [
-    "dist"
-  ],
-  "engines": {
-    "node": ">=20"
-  },
-  "publishConfig": {
-    "access": "public"
+  "exports": {
+    ".": "./src/index.ts",
+    "./ui": "./ui/src/index.ts"
   },
   "scripts": {
-    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "build": "npm run clean && npm run build:ui && npm run build:cli",
-    "build:cli": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/cli.js --log-level=warning",
-    "build:ui": "vite build",
-    "dev": "tsx src/cli.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json && tsc -p ui/tsconfig.json --noEmit",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "typecheck": "tsc -p tsconfig.json && tsc -p ui/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@diffshape/core": "workspace:*",
     "@diffshape/ui": "workspace:*",
     "@types/node": "^22.20.5",
     "@types/react": "18.3.12",
-    "@types/react-dom": "18.3.1",
-    "@vitejs/plugin-react": "4.3.4",
-    "esbuild": "0.23.1",
     "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "tsx": "4.19.2",
     "typescript": "5.6.3",
-    "vite": "5.4.11",
     "vitest": "2.1.8"
   }
 }

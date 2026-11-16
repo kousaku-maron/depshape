@@ -1,6 +1,6 @@
 # depshape
 
-git の差分で **フォルダ・ファイル間の依存関係がどう変わったか** を、既存の構造と並べてブラウザで可視化するツールです。
+git の差分で **フォルダ・ファイル間の依存関係がどう変わったか** を、既存の構造と並べてブラウザで可視化する、[diffshape](../diffshape) のモジュールです（左のアイコンバーの「依存」）。
 push 前のローカルレビューで、コード差分を見る前に「追加した部分の依存の形が、既存の部分と揃っているか」を確かめるために使います。
 
 ツールはファイルの役割（handler / usecase など）を理解しません。依存関係という事実だけを、比べやすい形で見せます。判断はレビューする人が行います。
@@ -12,10 +12,10 @@ Go と TypeScript / JavaScript に対応しています。Go や Node のツー�
 解析したいリポジトリの中で実行します（Node.js 20 以上と git が必要です）。
 
 ```bash
-npx @kousaku-maron/depshape . main --merge-base
+npx @kousaku-maron/diffshape . main --merge-base
 ```
 
-よく使うなら `npm install -g @kousaku-maron/depshape` で入れておくと、`depshape` コマンドとして使えます。以下の表の `depshape` は、npx で使う場合は `npx @kousaku-maron/depshape` と読み替えてください。
+diffshape は依存と DB の両方を開きます。依存だけを開くなら、同じパッケージに入っている `depshape` コマンドを使います（`npm install -g @kousaku-maron/diffshape` で入れると、`diffshape` / `depshape` / `dbshape` が使えます）。以下の表の `depshape` は `diffshape` に読み替えても同じ比較になります。
 
 | コマンド | 比較内容 |
 |---|---|
@@ -26,11 +26,11 @@ npx @kousaku-maron/depshape . main --merge-base
 | `depshape abc1234` | そのコミット単体の変更 |
 | `depshape staged` / `depshape working` | ステージ済み / 未ステージの変更のみ |
 
-オプション: `--port <n>`（デフォルト 4977、使用中なら +1）、`--host`、`--no-open`、`--json`（解析結果を標準出力へ）
+オプション: `--port <n>`（デフォルト 4977、使用中なら +1）、`--host`、`--no-open`、`--json`（`depshape` のみ。解析結果を標準出力へ）
 
 サーバーはデフォルトで `127.0.0.1` だけで待ち受け、`localhost` / `127.0.0.1` 宛て以外のリクエストは拒否します。`--host 0.0.0.0` などを指定すると、同じネットワークの他の端末からリポジトリのファイル構成と依存関係が見えるので注意してください（ソースコードの中身は送りません）。
 
-画面右上の「再読み込み」で、AI がファイルを書き換えた後の状態を再解析できます。
+ヘッダーの「再読み込み」で、AI がファイルを書き換えた後の状態を再解析できます。
 
 ## 画面の見方
 
@@ -49,7 +49,7 @@ npx @kousaku-maron/depshape . main --merge-base
   - パネルの行を右クリックして「非表示」を選ぶと、その行は半透明になり、出入りする線を描かなくなります（テストからの大量の依存など、一旦どけたい線に）。フォルダの行なら、開いたときの中の行も同じです。半透明の行を右クリックして「表示」で戻せます（「すべて表示」で全部戻ります）。非表示は保存せず、再読み込みで元に戻ります
   - 各列の行に共通する親フォルダは列の上に「〜 以下」と1回だけ出し、各行はそこからの相対パスで表示します。入りきらない長いパスは、名前を残して真ん中のフォルダから「…」に省きます（完全なパスはホバーで表示）
 - **コメント**（difit のようなレビューコメント）:
-  - ヘッダーの「💬 件数（未対応 n）」で右端のコメントサイドバーを開閉し、「AI 用にすべてコピー」で未対応のコメントを Claude Code / Codex などに貼れるプロンプトとしてコピーします
+  - 「💬 件数（未対応 n）」で右端のコメントサイドバーを開閉します。ヘッダーの「AI 用にコピー」で、未対応のコメントを Claude Code / Codex などに貼れるプロンプトとしてコピーします（DB モジュールのコメントもまとめてコピーします）
   - パネルの矢印をクリックすると選択（⌘ / Shift + クリックで追加・解除）。箱をクリックすると、そこから出る依存（真ん中・左の列）/ そこに入る依存（右の列）をまとめて選べます。ツリーの行は 💬 で単独、⌘ / Shift + クリックで選択に追加できます。選択するとサイドバーが開きます
   - サイドバーの下の入力欄に、選んだもの（コメント先）がチップで入ります。⌘Enter で保存、Esc でキャンセル。依存を選んだあと `c` キーで入力欄に移れます
   - 一覧はコメントが付いたファイル / フォルダごとにまとまり、「未対応のみ / すべて」で絞り込めます。各コメントの「コピー」でその1件だけをコピー、対象をクリックで図に表示、編集・削除もできます。カードにホバーすると図の該当する依存が、矢印にホバーすると該当するカードが光ります
@@ -80,14 +80,14 @@ npx @kousaku-maron/depshape . main --merge-base
 
 ## 開発
 
-[diffshape](https://github.com/kousaku-maron/diffshape) リポジトリの `packages/depshape` にあります。リポジトリのルートで `pnpm install` したあと、このフォルダで実行します。
+[diffshape](https://github.com/kousaku-maron/diffshape) リポジトリの `packages/depshape` にあります。`src/` が解析（`depAnalyzer`）、`ui/` が画面（`depModule`）です。リポジトリのルートで `pnpm install` したあと、このフォルダで実行します。
 
 ```bash
 pnpm test        # パーサ・差分計算・ビューのテスト
 pnpm typecheck
-pnpm build       # dist/ に CLI と UI をビルド
-node /path/to/packages/depshape/dist/cli.js --no-open   # 解析したいリポジトリの中で
 ```
+
+動かして見るときは、`packages/diffshape` をビルドして `dist/bin/depshape.js` を実行します。
 
 ## 今後の予定
 
@@ -97,4 +97,4 @@ node /path/to/packages/depshape/dist/cli.js --no-open   # 解析したいリポ�
 
 ## ライセンス
 
-MIT（[LICENSE](LICENSE)）。目のアイコンは [Feather](https://github.com/feathericons/feather)（MIT）の線画を使っています（ピンのアイコンは depshape で描いたものです）。
+MIT（[LICENSE](LICENSE)）。アイコンは [Feather](https://github.com/feathericons/feather)（MIT）の線画を使っています（ピンのアイコンは diffshape で描いたものです）。

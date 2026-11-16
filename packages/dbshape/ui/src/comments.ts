@@ -1,4 +1,4 @@
-import { loadJSON, removeKey, saveJSON } from "@diffshape/ui";
+import { loadCommentList, newCommentId, promptHeader, saveCommentList } from "@diffshape/ui";
 import type { ColumnView, DbShapeResult, IndexView, SourceLocation, TableChange } from "../../src/model";
 import { columnParts, indexText } from "./view";
 
@@ -173,7 +173,7 @@ export function commentState(data: DbShapeResult, c: ReviewComment): CommentStat
 
 export function newComment(data: DbShapeResult, target: CommentTarget, body: string): ReviewComment {
   return {
-    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+    id: newCommentId(),
     target,
     body,
     createdAt: Date.now(),
@@ -183,12 +183,11 @@ export function newComment(data: DbShapeResult, target: CommentTarget, body: str
 
 const where = (l?: SourceLocation) => (l ? (l.base ? `比較元の ${l.file}:${l.line}（変更後にはありません）` : `${l.file}:${l.line}`) : undefined);
 
-export function formatPrompt(data: DbShapeResult, comments: ReviewComment[], opts: { includeResolved?: boolean } = {}): { text: string; included: number; skipped: number } {
+export function formatPrompt(data: DbShapeResult, comments: ReviewComment[], opts: { includeResolved?: boolean; header?: boolean } = {}): { text: string; included: number; skipped: number } {
   const list = opts.includeResolved ? comments : comments.filter((c) => commentState(data, c) !== "resolved");
+  // without the header: a section of the prompt the app combines from every module
   const out: string[] = [
-    "以下は、DB スキーマの差分ビューア dbshape で付けたレビューコメントです。各指摘に対応してください。",
-    `リポジトリ: ${data.repoRoot}`,
-    `比較: ${data.target.label} と ${data.base.label} の差分`,
+    ...(opts.header === false ? [] : [...promptHeader({ repoRoot: data.repoRoot, targetLabel: data.target.label, baseLabel: data.base.label }), "対象: DB スキーマ（dbshape）"]),
     data.schemaFrom.kind === "atlas" ? `スキーマの SQL: ${data.schemaFrom.configs.join(", ")} の src` : `スキーマの SQL: ${data.schemaFrom.patterns.join(", ")}`,
     "",
   ];
@@ -209,12 +208,6 @@ export function formatPrompt(data: DbShapeResult, comments: ReviewComment[], opt
 
 const PREFIX = "dbshape.comments:";
 
-export function loadComments(scope: string): ReviewComment[] {
-  const v = loadJSON<unknown>(PREFIX + scope, []);
-  return Array.isArray(v) ? (v as ReviewComment[]) : [];
-}
+export const loadComments = (scope: string) => loadCommentList<ReviewComment>(PREFIX + scope);
 
-export function saveComments(scope: string, comments: ReviewComment[]) {
-  if (comments.length) saveJSON(PREFIX + scope, comments);
-  else removeKey(PREFIX + scope);
-}
+export const saveComments = (scope: string, comments: ReviewComment[]) => saveCommentList(PREFIX + scope, comments);

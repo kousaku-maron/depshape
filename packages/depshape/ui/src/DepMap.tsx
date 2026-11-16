@@ -39,6 +39,8 @@ export interface DepMapProps {
   /** the comment sidebar (opened from the header, or automatically when something is selected) */
   sidebarOpen: boolean;
   onSidebarOpen: (open: boolean) => void;
+  /** whether this module is shown (keyboard shortcuts only act then) */
+  active: boolean;
 }
 
 interface Mark {
@@ -155,8 +157,11 @@ export function DepMap(props: DepMapProps) {
     setSelection([]);
     setDraft({ editingId: null, body: "" });
   };
+  const activeRef = useRef(props.active);
+  activeRef.current = props.active;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!activeRef.current) return;
       const typing = document.activeElement instanceof HTMLTextAreaElement || document.activeElement instanceof HTMLInputElement;
       if (typing) return;
       if (e.key === "Escape") setSelection([]);

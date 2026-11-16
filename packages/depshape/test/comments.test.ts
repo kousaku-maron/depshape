@@ -66,6 +66,17 @@ describe("formatPrompt", () => {
     expect(text).toContain("参考: app/handler/ の変更のないファイル 3 個の主な依存先: example.com/app/usecase (2)");
     expect(text).toContain("コメント: usecase を経由してください");
   });
+
+  it("leaves out the shared header when the app combines it with other modules", () => {
+    const model = buildModel(before);
+    const { byPath } = buildTree(model);
+    const full = formatPrompt(model, byPath, [comment([NEW_FILE])]).text;
+    const section = formatPrompt(model, byPath, [comment([NEW_FILE])], { header: false }).text;
+    expect(full.split("\n")[0]).toContain("diffshape");
+    expect(full).toContain("対象: コードの依存関係（depshape）");
+    expect(section.startsWith("1.")).toBe(true);
+    expect(full.endsWith(section)).toBe(true);
+  });
 });
 
 describe("commentState", () => {

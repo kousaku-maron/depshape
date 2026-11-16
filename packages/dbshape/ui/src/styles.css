@@ -1,11 +1,16 @@
-/* dbshape's own colors; the shared ones come from @diffshape/ui/base.css */
-:root {
+/*
+ * dbshape's styles. Everything is scoped to the module's root, because the diffshape shell shows
+ * several modules in one page. The shared colors and base styles come from @diffshape/ui/base.css.
+ */
+[data-module="db"] {
+/* dbshape's own colors */
+& {
   --values: #8250df;
   --values-bg: #fbefff;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  & {
     --values: #ab7df8;
     --values-bg: rgba(171, 125, 248, 0.16);
   }
@@ -1243,4 +1248,5 @@ tr:hover > td > .cbtn,
   fill: #fff;
   font-size: 11px;
   font-weight: 600;
+}
 }

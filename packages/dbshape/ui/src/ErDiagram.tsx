@@ -51,9 +51,16 @@ export const ErDiagram = forwardRef<ErDiagramHandle, Props>(function ErDiagram({
   const diagram = useMemo(() => buildDiagram(tables, mode, expanded, measure), [tables, mode, expanded, measure]);
   const byName = useMemo(() => new Map(diagram.tables.map((t) => [t.table.name, t])), [diagram]);
 
+  // a fit asked for while the diagram has no size (its module is hidden) waits until it is shown
+  const pendingFit = useRef(false);
   const fit = useCallback(() => {
     const el = box.current;
     if (!el || diagram.width === 0) return;
+    if (el.clientWidth === 0 || el.clientHeight === 0) {
+      pendingFit.current = true;
+      return;
+    }
+    pendingFit.current = false;
     const k = Math.min(1.2, Math.max(0.2, Math.min(el.clientWidth / diagram.width, el.clientHeight / diagram.height)));
     setView({ k, x: (el.clientWidth - diagram.width * k) / 2, y: Math.max(0, (el.clientHeight - diagram.height * k) / 2) });
   }, [diagram]);
@@ -64,6 +71,16 @@ export const ErDiagram = forwardRef<ErDiagramHandle, Props>(function ErDiagram({
     fit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shownKey]);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (pendingFit.current) fit();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fit]);
 
   const zoomAt = useCallback((factor: number, cx: number, cy: number) => {
     setView((v) => {

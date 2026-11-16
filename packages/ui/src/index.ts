@@ -1,3 +1,6 @@
 export { copyText } from "./clipboard";
-export { EyeIcon, PinIcon } from "./icons";
-export { loadJSON, removeKey, saveJSON } from "./storage";
+export { CommentInput } from "./CommentInput";
+export { COMMENT_STATE_LABEL, loadCommentList, newCommentId, promptHeader, saveCommentList, type CommentStateName } from "./comments";
+export { DatabaseIcon, EyeIcon, GraphIcon, PinIcon } from "./icons";
+export type { CommentReport, ModuleViewProps, ShapeModule } from "./module";
+export { loadJSON, removeKey, saveJSON, useStoredSet } from "./storage";

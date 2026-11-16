@@ -1,0 +1,210 @@
+/* The diffshape shell: icon rail, header, and the area the modules draw in. */
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.shell.with-rail {
+  grid-template-columns: 60px minmax(0, 1fr);
+}
+
+/* ---- rail */
+
+.rail {
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.rail-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 48px;
+  padding: 7px 0 5px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.rail-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.rail-btn.on {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* the bar on the left edge of the shown module */
+.rail-btn.on::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+
+.rail-btn.unavailable {
+  opacity: 0.45;
+}
+
+.rail-label {
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.rail-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--modified-bg);
+  color: var(--modified);
+  border: 1px solid var(--modified);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+}
+
+/* open review comments */
+.rail-dot {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ---- header */
+
+.shell-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.shell-brand {
+  font-weight: 600;
+}
+
+.shell-module {
+  color: var(--muted);
+}
+
+.shell-compare {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-compare b {
+  font-weight: 500;
+}
+
+.shell-spacer {
+  flex: 1;
+}
+
+.shell-note {
+  color: var(--added);
+  font-size: 12px;
+}
+
+.shell-btn {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.shell-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.shell-btn:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.shell-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.shell-btn.primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.1);
+}
+
+.shell-btn.primary:disabled {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+/* ---- modules */
+
+.shell-body {
+  min-height: 0;
+  min-width: 0;
+}
+
+.shell-module-root {
+  height: 100%;
+  min-height: 0;
+}
+
+.shell-module-root[hidden] {
+  display: none;
+}
+
+.shell-message {
+  padding: 40px;
+  color: var(--text);
+}
+
+.shell-muted {
+  color: var(--muted);
+}
+
+.shell-error {
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 700px) {
+  .shell.with-rail {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+  .rail-btn {
+    width: 44px;
+  }
+}
