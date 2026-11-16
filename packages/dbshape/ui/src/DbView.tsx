@@ -1,4 +1,4 @@
-import { copyText, type ModuleViewProps } from "@diffshape/ui";
+import type { ModuleViewProps } from "@diffshape/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
 import { commentState, formatPrompt, loadComments, newComment, saveComments, targetId, targetLabel, type CommentTarget, type ReviewComment } from "./comments";
@@ -27,7 +27,6 @@ export function DbView({ data, active, onComments }: ModuleViewProps<DbShapeResu
   const [comments, setComments] = useState<ReviewComment[]>(() => loadComments(scope));
   const [composing, setComposing] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const [copyNote, setCopyNote] = useState<string | null>(null);
   const diagram = useRef<ErDiagramHandle>(null);
 
   useEffect(() => {
@@ -95,14 +94,6 @@ export function DbView({ data, active, onComments }: ModuleViewProps<DbShapeResu
     setComments(next);
     saveComments(scope, next);
   };
-  const flash = (note: string) => {
-    setCopyNote(note);
-    window.setTimeout(() => setCopyNote((n) => (n === note ? null : n)), 2500);
-  };
-  const copy = async (text: string, note: string) => {
-    await copyText(text);
-    flash(note);
-  };
   const api: CommentsApi = {
     data,
     comments,
@@ -125,7 +116,6 @@ export function DbView({ data, active, onComments }: ModuleViewProps<DbShapeResu
       setEditing(null);
     },
     remove: (id) => setAndSave(comments.filter((c) => c.id !== id)),
-    copy: (text, note) => void copy(text, note),
   };
   /** Shows a comment: selects its table (or type) and scrolls the panel to it */
   const showComment = (t: CommentTarget) => {
@@ -158,7 +148,6 @@ export function DbView({ data, active, onComments }: ModuleViewProps<DbShapeResu
             <span className="badge values">値 {d.values.length}</span>
           </span>
           <span className="spacer" />
-          {copyNote && <span className="copy-note">{copyNote}</span>}
           {tables.length > 0 && (
             <span className="muted progress">
               確認済み {reviewedCount}/{tables.length}
