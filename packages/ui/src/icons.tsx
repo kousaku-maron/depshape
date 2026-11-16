@@ -1,4 +1,4 @@
-/* Eye / eye-off outlines (Feather) and a push pin. Work inside HTML and inside another <svg>. */
+/* Icons (Feather outlines) for the diffshape tools. They work inside HTML and inside another <svg>. */
 
 /*!
  * Icon paths from Feather (https://github.com/feathericons/feather)

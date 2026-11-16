@@ -1,3 +1,4 @@
+import { copyText } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
 import { commentState, formatPrompt, loadComments, newComment, saveComments, targetId, targetLabel, type CommentTarget, type ReviewComment } from "./comments";
@@ -125,16 +126,7 @@ export function App() {
     window.setTimeout(() => setCopyNote((n) => (n === note ? null : n)), 2500);
   };
   const copy = async (text: string, note: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-    }
+    await copyText(text);
     flash(note);
   };
   const api: CommentsApi = {

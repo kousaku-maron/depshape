@@ -1,3 +1,4 @@
+import { loadJSON, removeKey, saveJSON } from "@diffshape/ui";
 import type { ColumnView, DbShapeResult, IndexView, SourceLocation, TableChange } from "../../src/model";
 import { columnParts, indexText } from "./view";
 
@@ -209,22 +210,11 @@ export function formatPrompt(data: DbShapeResult, comments: ReviewComment[], opt
 const PREFIX = "dbshape.comments:";
 
 export function loadComments(scope: string): ReviewComment[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(PREFIX + scope) ?? "[]");
-    return Array.isArray(v) ? (v as ReviewComment[]) : [];
-  } catch {
-    return [];
-  }
+  const v = loadJSON<unknown>(PREFIX + scope, []);
+  return Array.isArray(v) ? (v as ReviewComment[]) : [];
 }
 
 export function saveComments(scope: string, comments: ReviewComment[]) {
-  try {
-    if (comments.length) localStorage.setItem(PREFIX + scope, JSON.stringify(comments));
-    else localStorage.removeItem(PREFIX + scope);
-  } catch {
-    /* ignore */
-  }
+  if (comments.length) saveJSON(PREFIX + scope, comments);
+  else removeKey(PREFIX + scope);
 }
-
-/** Comments that belong to a table's panel (the table, its parts and its CHECK values) */
-export const onTable = (c: ReviewComment, table: string) => c.target.table === table;

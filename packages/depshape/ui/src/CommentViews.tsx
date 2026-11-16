@@ -1,3 +1,4 @@
+import { copyText } from "@diffshape/ui";
 import { forwardRef, useState } from "react";
 import {
   commentState,
@@ -32,19 +33,6 @@ export function keyLabel(model: Model, tree: Map<string, TreeDir>, key: string):
 function anchorOf(c: ReviewComment): string {
   const t = parseKey(c.targets[0] ?? "I:root");
   return t.kind === "link" ? t.from : t.id;
-}
-
-export async function copyText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    ta.remove();
-  }
 }
 
 const STATE_LABEL: Record<CommentState, string> = { open: "未対応", partial: "一部解消", resolved: "解消済み？" };

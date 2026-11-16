@@ -52,6 +52,7 @@
   },
   "devDependencies": {
     "@diffshape/core": "workspace:*",
+    "@diffshape/ui": "workspace:*",
     "@types/node": "^22.20.5",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",

@@ -24,7 +24,7 @@ pnpm typecheck
 pnpm build
 ```
 
-共通の部分（git の読み取りと比較対象の解決）は `packages/core` にあり、各 CLI のビルド時に取り込みます（npm には公開しません）。
+共通の部分は、Node 側（git の読み取り、比較対象の解決、ローカルサーバー）が `packages/core`、画面側（色・基本スタイル・アイコン・小さな関数）が `packages/ui` にあり、各ツールのビルド時に取り込みます（どちらも npm には公開しません）。
 
 パッケージごとの作業は `pnpm --filter @kousaku-maron/depshape <script>` か、そのフォルダの中で実行します。npm への公開は、パッケージのフォルダで `pnpm publish` を使います（`workspace:*` の依存を書き換えて公開するため。`npm publish` は使いません）。
 
