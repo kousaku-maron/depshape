@@ -693,35 +693,13 @@ button.primary:disabled {
   }
 }
 
-/* the lines between the areas: drag to resize */
-.area-divider {
-  position: relative;
-  cursor: col-resize;
-  touch-action: none;
-  background: transparent;
-}
-.area-divider::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  transform: translateX(-50%);
-  background: var(--border);
-}
-.area-divider:hover::after,
-.area-divider.dragging::after {
-  width: 3px;
-  background: var(--accent);
-}
 @media (max-width: 1100px) {
   /* stacked: no dividers, and the inline widths do not apply */
   .map-body,
   .map-body.with-sidebar {
     grid-template-columns: 1fr !important;
   }
-  .area-divider {
+  .ds-divider {
     display: none;
   }
 }
@@ -911,10 +889,4 @@ button.primary:disabled {
 .panel-menu .eye {
   color: var(--muted);
 }
-}
-
-/* while a divider is dragged */
-body.resizing {
-  cursor: col-resize;
-  user-select: none;
 }

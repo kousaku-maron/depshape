@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { CommentSidebar, type Draft } from "./CommentViews";
 import { commentState, itemKey, parseKey, type ReviewComment } from "./comments";
 import { DepPanel } from "./DepPanel";
-import { PinIcon } from "@diffshape/ui";
+import { AreaDivider, PinIcon, useWidth } from "@diffshape/ui";
 import { unhide } from "./hide";
 import { clampLayout, DEFAULT_SIDE, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { parentDir, type Model, type TreeDir } from "./model";
@@ -86,15 +86,7 @@ export function DepMap(props: DepMapProps) {
   // area widths: dragged on the dividers, saved for next time
   const bodyRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<Layout>(loadLayout);
-  const [bodyW, setBodyW] = useState(0);
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setBodyW(el.clientWidth));
-    ro.observe(el);
-    setBodyW(el.clientWidth);
-    return () => ro.disconnect();
-  }, []);
+  const bodyW = useWidth(bodyRef);
   const anchor = useRef<{ id: string; top: number } | null>(null);
 
   const openKey = useMemo(() => [...open].sort().join("|"), [open]);
@@ -298,8 +290,7 @@ export function DepMap(props: DepMapProps) {
   };
 
   const row = (n: ViewNode) => {
-    const icon =
-      n.kind === "open" ? (n.collapsed ? "▸" : "▾") : n.kind === "rest" ? (n.full ? "▾" : "▸") : n.kind === "dir" ? "▸" : "";
+    const icon = n.kind === "open" ? (n.collapsed ? "▸" : "▾") : n.kind === "rest" ? (n.full ? "▾" : "▸") : n.kind === "dir" ? "▸" : "";
     const text = n.kind === "file" || n.kind === "rest" ? n.label : `${n.label}/`;
     const m = (n.kind === "open" && !n.collapsed) || (n.kind === "rest" && n.full) ? undefined : marks.get(n.id);
     const isPinned = pinned.has(n.id);
@@ -431,7 +422,7 @@ export function DepMap(props: DepMapProps) {
         <div className="map-scroll tree" ref={scrollRef} onMouseLeave={releaseHover}>
           {renderNodes(view.roots)}
         </div>
-        <Divider
+        <AreaDivider
           title="ドラッグでツリーとパネルの幅を変える（ダブルクリックで元に戻す）"
           start={() => scrollRef.current?.getBoundingClientRect().width ?? 0}
           onDrag={(w0, dx) => setLayout((l) => clampLayout({ ...l, tree: w0 + dx }, bodyW, sidebarOpen))}
@@ -459,7 +450,7 @@ export function DepMap(props: DepMapProps) {
           onHiddenChange={setHidden}
         />
         {sidebarOpen && (
-          <Divider
+          <AreaDivider
             title="ドラッグでコメントの幅を変える（ダブルクリックで元に戻す）"
             start={() => clampLayout(layout, bodyW, true).side}
             onDrag={(w0, dx) => setLayout((l) => clampLayout({ ...l, side: w0 - dx }, bodyW, true))}
@@ -493,45 +484,10 @@ export function DepMap(props: DepMapProps) {
       </div>
       <div className="legend">
         <span className="muted">
-          行にホバーすると右のパネルに依存先が出ます ・ ピンのアイコンでピン留めし、複数並べて比べられます ・ 矢印や箱のクリック（⌘ / Shift で複数）・行の 💬 でコメント（c キーで入力欄へ）・ 「+n 依存」= 今回増えた import ・
-          {mode === "changes" ? " 「ほか N ファイル」= 変更のない既存ファイル（クリックで展開）" : " フォルダをクリックで開閉"}
+          行にホバーすると右のパネルに依存先が出ます ・ ピンのアイコンでピン留めし、複数並べて比べられます ・ 矢印や箱のクリック（⌘ / Shift で複数）・行の 💬 でコメント（c キーで入力欄へ）・ 「+n
+          依存」= 今回増えた import ・{mode === "changes" ? " 「ほか N ファイル」= 変更のない既存ファイル（クリックで展開）" : " フォルダをクリックで開閉"}
         </span>
       </div>
     </div>
-  );
-}
-
-/** A draggable line between two areas: `start` reads the width being changed, `onDrag` gets it plus the move. */
-function Divider(props: { title: string; start: () => number; onDrag: (w0: number, dx: number) => void; onEnd: () => void; onReset: () => void }) {
-  return (
-    <div
-      className="area-divider"
-      role="separator"
-      aria-orientation="vertical"
-      title={props.title}
-      onDoubleClick={props.onReset}
-      onPointerDown={(e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        const el = e.currentTarget;
-        const x0 = e.clientX;
-        const w0 = props.start();
-        el.setPointerCapture(e.pointerId);
-        el.classList.add("dragging");
-        document.body.classList.add("resizing");
-        const move = (ev: PointerEvent) => props.onDrag(w0, ev.clientX - x0);
-        const up = () => {
-          el.removeEventListener("pointermove", move);
-          el.removeEventListener("pointerup", up);
-          el.removeEventListener("pointercancel", up);
-          el.classList.remove("dragging");
-          document.body.classList.remove("resizing");
-          props.onEnd();
-        };
-        el.addEventListener("pointermove", move);
-        el.addEventListener("pointerup", up);
-        el.addEventListener("pointercancel", up);
-      }}
-    />
   );
 }

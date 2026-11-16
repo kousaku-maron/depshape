@@ -91,19 +91,14 @@ ins,
   cursor: default;
 }
 
+/* list | line | diagram | line | panel; the widths come from the dragged lines (layout.ts) */
 .body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-}
-
-.body.with-panel {
-  grid-template-columns: 260px minmax(0, 1fr) minmax(360px, 34%);
 }
 
 .side {
-  border-right: 1px solid var(--border);
   overflow: auto;
   padding: 10px 8px 16px;
 }
@@ -163,7 +158,6 @@ ins,
 }
 
 .panel {
-  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -210,19 +204,21 @@ ins,
 }
 
 @media (max-width: 900px) {
+  /* stacked: no dividers, and the dragged widths do not apply */
   .body,
   .body.with-panel {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) !important;
     grid-template-rows: auto minmax(420px, 1fr) auto;
     overflow: auto;
   }
+  .ds-divider {
+    display: none;
+  }
   .side {
-    border-right: none;
     border-bottom: 1px solid var(--border);
     max-height: 40vh;
   }
   .panel {
-    border-left: none;
     border-top: 1px solid var(--border);
   }
 }

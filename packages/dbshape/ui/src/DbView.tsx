@@ -1,4 +1,4 @@
-import type { ModuleViewProps } from "@diffshape/ui";
+import { AreaDivider, useWidth, type ModuleViewProps } from "@diffshape/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
 import { commentState, formatPrompt, loadComments, newComment, saveComments, targetId, targetLabel, type CommentTarget, type ReviewComment } from "./comments";
@@ -6,6 +6,7 @@ import { CommentsContext, STATE_LABEL, type CommentsApi } from "./CommentViews";
 import { Details, type Selection } from "./Details";
 import { ErDiagram, type ErDiagramHandle } from "./ErDiagram";
 import type { Mode } from "./erLayout";
+import { clampLayout, DEFAULT_LAYOUT, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { loadReviewed, saveReviewed } from "./reviewed";
 import { hashOf, matchesFilter, tableStats, valueChips, valueTarget, type Status } from "./view";
 
@@ -28,6 +29,11 @@ export function DbView({ data, active, onComments }: ModuleViewProps<DbShapeResu
   const [composing, setComposing] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const diagram = useRef<ErDiagramHandle>(null);
+  // area widths: dragged on the lines between them, saved for next time
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const sideRef = useRef<HTMLElement>(null);
+  const bodyW = useWidth(bodyRef);
+  const [layout, setLayout] = useState<Layout>(loadLayout);
 
   useEffect(() => {
     if (!active) return;
@@ -155,8 +161,8 @@ export function DbView({ data, active, onComments }: ModuleViewProps<DbShapeResu
           )}
         </header>
 
-        <div className={`body ${sel ? "with-panel" : ""}`}>
-          <nav className="side">
+        <div className={`body ${sel ? "with-panel" : ""}`} ref={bodyRef} style={{ gridTemplateColumns: gridColumns(bodyW ? clampLayout(layout, bodyW, !!sel) : layout, !!sel) }}>
+          <nav className="side" ref={sideRef}>
             <input className="filter" placeholder="テーブル・カラムで絞り込み" value={filter} onChange={(e) => setFilter(e.target.value)} />
             {GROUPS.map((g) => {
               const items = shown.filter((t) => t.status === g.status);
@@ -280,6 +286,13 @@ export function DbView({ data, active, onComments }: ModuleViewProps<DbShapeResu
               )}
             </div>
           </nav>
+          <AreaDivider
+            title="ドラッグで一覧と図の幅を変える（ダブルクリックで元に戻す）"
+            start={() => sideRef.current?.getBoundingClientRect().width ?? layout.side}
+            onDrag={(w0, dx) => setLayout((l) => clampLayout({ ...l, side: w0 + dx }, bodyW, !!sel))}
+            onEnd={() => setLayout((l) => (saveLayout(l), l))}
+            onReset={() => setLayout((l) => (saveLayout({ ...l, side: DEFAULT_LAYOUT.side }), { ...l, side: DEFAULT_LAYOUT.side }))}
+          />
 
           <main className="canvas">
             <div className="toolbar">
@@ -329,6 +342,15 @@ export function DbView({ data, active, onComments }: ModuleViewProps<DbShapeResu
             )}
           </main>
 
+          {sel && (
+            <AreaDivider
+              title="ドラッグで図と詳細パネルの幅を変える（ダブルクリックで元に戻す）"
+              start={() => clampLayout(layout, bodyW, true).panel}
+              onDrag={(w0, dx) => setLayout((l) => clampLayout({ ...l, panel: w0 - dx }, bodyW, true))}
+              onEnd={() => setLayout((l) => (saveLayout(l), l))}
+              onReset={() => setLayout((l) => (saveLayout({ ...l, panel: DEFAULT_LAYOUT.panel }), { ...l, panel: DEFAULT_LAYOUT.panel }))}
+            />
+          )}
           {sel && (
             <Details
               selection={sel}

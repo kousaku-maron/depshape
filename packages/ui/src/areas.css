@@ -1,0 +1,31 @@
+/* The draggable line between areas (AreaDivider.tsx). */
+
+.ds-divider {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.ds-divider::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+}
+
+.ds-divider:hover::after,
+.ds-divider.dragging::after {
+  width: 3px;
+  background: var(--accent);
+}
+
+/* while a divider is dragged */
+body.ds-resizing {
+  cursor: col-resize;
+  user-select: none;
+}

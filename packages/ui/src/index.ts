@@ -1,3 +1,4 @@
+export { AreaDivider, DIVIDER_W, useWidth } from "./AreaDivider";
 export { copyText } from "./clipboard";
 export { CommentInput } from "./CommentInput";
 export { CommentCard, CommentComposer, type CommentCardProps, type CommentComposerProps } from "./CommentParts";
