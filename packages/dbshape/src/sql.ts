@@ -150,8 +150,9 @@ export function exprText(n: Node): string {
       }
     }
     case "BoolExpr": {
-      const args = (v.args ?? []).map(wrap);
-      if (v.boolop === "NOT_EXPR") return `NOT ${args[0]}`;
+      if (v.boolop === "NOT_EXPR") return `NOT ${wrap(v.args?.[0])}`;
+      // comparisons bind tighter than AND / OR, so only a nested AND / OR needs parentheses
+      const args = (v.args ?? []).map((a: Node) => (a?.BoolExpr ? `(${exprText(a)})` : exprText(a)));
       return args.join(v.boolop === "AND_EXPR" ? " AND " : " OR ");
     }
     case "NullTest":

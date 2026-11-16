@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { openBrowser } from "@diffshape/core";
 import { analyze, type CompareOptions } from "./analyze.js";
 import { startServer } from "./server.js";
 
@@ -79,12 +79,6 @@ function parseArgs(argv: string[]): Args {
 function fail(msg: string): never {
   process.stderr.write(`depshape: ${msg}\n`);
   process.exit(1);
-}
-
-function openBrowser(url: string) {
-  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
-  const cmdArgs = process.platform === "win32" ? ["/c", "start", "", url] : [url];
-  spawn(cmd, cmdArgs, { stdio: "ignore", detached: true }).on("error", () => {}).unref();
 }
 
 async function main() {

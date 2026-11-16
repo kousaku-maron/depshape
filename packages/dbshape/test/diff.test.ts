@@ -59,6 +59,8 @@ describe("diffSchemas", () => {
     expect(inv.columns[0].after!.type).toBe("numeric(12,2)");
     expect(inv.constraints.map((c) => [c.name, c.status])).toEqual([["invoices_subscription_id_fkey", "added"]]);
     expect(inv.indexes.map((i) => [i.name, i.status])).toEqual([["invoices_subscription_idx", "added"]]);
+    expect(inv.unchanged!.columns.map((c) => c.name)).toEqual(["id", "status"]);
+    expect(inv.unchanged!.constraints.map((c) => c.name)).toEqual(["invoices_pkey"]);
 
     const sub = d.tables[3];
     expect(sub.columns.map((c) => c.name)).toEqual(["id", "price_id"]);

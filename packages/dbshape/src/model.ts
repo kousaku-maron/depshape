@@ -91,6 +91,8 @@ export interface TableChange {
   constraints: ConstraintChange[];
   indexes: IndexChange[];
   comment?: { before?: string; after?: string };
+  /** For modified tables: the parts that did not change (context for the review) */
+  unchanged?: { columns: ColumnView[]; constraints: ConstraintView[]; indexes: IndexView[] };
 }
 
 export interface EnumChange {
@@ -138,6 +140,49 @@ export interface SchemaDiff {
   unchangedTables: number;
 }
 
+// ---- the ER diagram: every table on the target side (plus removed ones) with what changed
+
+export type ErStatus = ChangeStatus | "unchanged";
+
+export interface ErColumn {
+  name: string;
+  type: string;
+  /** The type before, when it changed */
+  beforeType?: string;
+  status: ErStatus;
+  notNull: boolean;
+  primary: boolean;
+  /** The values this column may take changed (CHECK / enum type / domain) */
+  values?: boolean;
+}
+
+export interface ErForeignKey {
+  name: string;
+  columns: string[];
+  /** Referenced table, "schema.table" */
+  table: string;
+  refColumns: string[];
+  status: ErStatus;
+}
+
+export interface ErTable {
+  name: string;
+  schema: string;
+  table: string;
+  status: ErStatus;
+  columns: ErColumn[];
+  foreignKeys: ErForeignKey[];
+  /** Changed constraints other than foreign keys, and changed indexes */
+  otherChanges: { constraints: number; indexes: number; comment: boolean };
+}
+
+/** Where a part of the schema is defined; `base` = only on the base side (it was removed) */
+export interface SourceLocation {
+  file: string;
+  line: number;
+  base?: true;
+}
+
 export interface SideInfo {
   label: string;
   files: string[];
@@ -151,6 +196,13 @@ export interface DbShapeResult {
   /** Where the schema files came from */
   schemaFrom: { kind: "atlas"; configs: string[] } | { kind: "option"; patterns: string[] };
   diff: SchemaDiff;
+  /** Tables for the ER diagram (all of them; the view picks which to show) */
+  er: ErTable[];
+  /**
+   * Where each table, column, constraint, index and type is defined (target side, else base side), by
+   * "schema.table", "schema.table.column", "schema.table:constraint_or_index" and "schema.type"
+   */
+  locations: Record<string, SourceLocation>;
   /** Statements read but not compared (functions, views, grants, ...) with their counts on the target side */
   ignored: { statement: string; count: number }[];
   /** Files that could not be parsed (their tables are left out of the comparison) and other notes */

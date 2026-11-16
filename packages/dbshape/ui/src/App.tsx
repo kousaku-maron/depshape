@@ -1,0 +1,413 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
+import { commentState, formatPrompt, loadComments, newComment, saveComments, targetId, targetLabel, type CommentTarget, type ReviewComment } from "./comments";
+import { CommentsContext, STATE_LABEL, type CommentsApi } from "./CommentViews";
+import { Details, type Selection } from "./Details";
+import { ErDiagram, type ErDiagramHandle } from "./ErDiagram";
+import type { Mode } from "./erLayout";
+import { loadReviewed, saveReviewed } from "./reviewed";
+import { hashOf, matchesFilter, tableStats, valueChips, valueTarget, type Status } from "./view";
+
+async function fetchDiff(refresh: boolean): Promise<DbShapeResult> {
+  const res = await fetch(`/api/diff${refresh ? "?refresh=1" : ""}`);
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as DbShapeResult;
+}
+
+/** Reviewed marks are kept per repository and comparison */
+const scopeOf = (d: DbShapeResult) => `${d.repoRoot}|${d.base.label}|${d.target.label}`;
+
+const GROUPS: { status: Status; title: string }[] = [
+  { status: "added", title: "新規テーブル" },
+  { status: "modified", title: "変更したテーブル" },
+  { status: "removed", title: "削除したテーブル" },
+];
+
+export function App() {
+  const [data, setData] = useState<DbShapeResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [mode, setMode] = useState<Mode>("changes");
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [reviewed, setReviewed] = useState<Record<string, string>>({});
+  const [comments, setComments] = useState<ReviewComment[]>([]);
+  const [composing, setComposing] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [copyNote, setCopyNote] = useState<string | null>(null);
+  const diagram = useRef<ErDiagramHandle>(null);
+
+  const load = useCallback(async (refresh: boolean) => {
+    setLoading(true);
+    try {
+      const d = await fetchDiff(refresh);
+      // set together so the first render already knows which tables are reviewed
+      setReviewed(loadReviewed(scopeOf(d)));
+      setComments(loadComments(scopeOf(d)));
+      setData(d);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load(false);
+  }, [load]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Esc in a comment box only closes the box
+      if (e.key === "Escape" && !(e.target instanceof HTMLElement && e.target.closest("textarea, input"))) setSelection(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const tables = data?.diff.tables ?? [];
+  const known = useMemo(() => new Set(tables.map((t) => t.name)), [tables]);
+  const isReviewed = (t: TableChange) => reviewed[t.name] === hashOf(t);
+  const reviewedSet = useMemo(() => new Set(tables.filter((t) => reviewed[t.name] === hashOf(t)).map((t) => t.name)), [tables, reviewed]);
+
+  // value changes as hover text on the diagram's column rows
+  const valueText = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const v of data?.diff.values ?? []) {
+      const text = valueChips(v.before, v.after)
+        .map((c) => (c.status === "added" ? `+${c.value}` : c.status === "removed" ? `−${c.value}` : c.value))
+        .join("  ");
+      const cols = v.source === "check" ? [`${v.table}.${v.column}`] : (v.usedBy ?? []);
+      for (const c of cols) m.set(c, `値: ${text}`);
+    }
+    return m;
+  }, [data]);
+
+  // open comments per table and per column, for the marks on the diagram
+  const commentMarks = useMemo(() => {
+    const tables = new Map<string, number>();
+    const columns = new Set<string>();
+    if (!data) return { tables, columns };
+    for (const c of comments) {
+      if (commentState(data, c) === "resolved" || !c.target.table) continue;
+      tables.set(c.target.table, (tables.get(c.target.table) ?? 0) + 1);
+      if (c.target.kind === "column" || c.target.kind === "value") columns.add(`${c.target.table}.${c.target.name}`);
+    }
+    return { tables, columns };
+  }, [data, comments]);
+
+  if (error && !data) return <div className="fatal">読み込めませんでした: {error}</div>;
+  if (!data) return <div className="fatal muted">解析中…</div>;
+
+  const scope = scopeOf(data);
+  const d = data.diff;
+  const setTableReviewed = (t: TableChange, on: boolean) => {
+    const next = { ...reviewed };
+    if (on) next[t.name] = hashOf(t);
+    else delete next[t.name];
+    setReviewed(next);
+    saveReviewed(scope, next);
+  };
+
+  const selectTable = (name: string, focus = true) => {
+    setSelection({ kind: "table", name });
+    // a table only shown in "all" (unchanged and not a neighbor) switches the view
+    if (focus) window.setTimeout(() => diagram.current?.focus(name), 0);
+  };
+
+  const setAndSave = (next: ReviewComment[]) => {
+    setComments(next);
+    saveComments(scope, next);
+  };
+  const flash = (note: string) => {
+    setCopyNote(note);
+    window.setTimeout(() => setCopyNote((n) => (n === note ? null : n)), 2500);
+  };
+  const copy = async (text: string, note: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    flash(note);
+  };
+  const api: CommentsApi = {
+    data,
+    comments,
+    composing,
+    editing,
+    compose: (t) => {
+      setComposing(t ? targetId(t) : null);
+      setEditing(null);
+    },
+    edit: (id) => {
+      setEditing(id);
+      setComposing(null);
+    },
+    add: (t, body) => {
+      setAndSave([...comments, newComment(data, t, body)]);
+      setComposing(null);
+    },
+    update: (id, body) => {
+      setAndSave(comments.map((c) => (c.id === id ? { ...c, body } : c)));
+      setEditing(null);
+    },
+    remove: (id) => setAndSave(comments.filter((c) => c.id !== id)),
+    copy: (text, note) => void copy(text, note),
+  };
+  const copyAll = () => {
+    const { text, included, skipped } = formatPrompt(data, comments);
+    void copy(text, `${included} 件をコピーしました${skipped ? `（解消済み？の ${skipped} 件は除外）` : ""}`);
+  };
+  /** Shows a comment: selects its table (or type) and scrolls the panel to it */
+  const showComment = (t: CommentTarget) => {
+    if (t.table) selectTable(t.table);
+    else setSelection({ kind: "type", name: t.name });
+    window.setTimeout(() => document.getElementById(`c-${targetId(t)}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
+  };
+  const openComments = comments.filter((c) => commentState(data, c) !== "resolved").length;
+
+  const shown = tables.filter((t) => matchesFilter(t, filter));
+  const types = [
+    ...d.enums.map((e) => ({ kind: "ENUM 型" as const, change: e as EnumChange | DomainChange })),
+    ...d.domains.map((e) => ({ kind: "DOMAIN" as const, change: e as EnumChange | DomainChange })),
+  ];
+  const reviewedCount = tables.filter(isReviewed).length;
+  const sel = selection;
+  const selChange = sel?.kind === "table" ? tables.find((t) => t.name === sel.name) : undefined;
+  const selEr = sel?.kind === "table" ? data.er.find((t) => t.name === sel.name) : undefined;
+  const selValues = sel?.kind === "table" ? d.values.filter((v) => v.table === sel.name || v.usedBy?.some((u) => u.startsWith(`${sel.name}.`))) : [];
+  const selType = sel?.kind === "type" ? types.find((t) => t.change.name === sel.name) : undefined;
+  const empty = tables.length === 0 && d.values.length === 0 && types.length === 0;
+
+  return (
+    <CommentsContext.Provider value={api}>
+      <div className="app">
+        <header className="top">
+          <span className="brand">dbshape</span>
+          <span className="compare">
+            <b>{data.target.label}</b>
+            <span className="muted"> vs </span>
+            <b>{data.base.label}</b>
+          </span>
+          <span className="counts">
+            <span className="badge added">新規 {tables.filter((t) => t.status === "added").length}</span>
+            <span className="badge modified">変更 {tables.filter((t) => t.status === "modified").length}</span>
+            <span className="badge removed">削除 {tables.filter((t) => t.status === "removed").length}</span>
+            <span className="badge values">値 {d.values.length}</span>
+          </span>
+          <span className="spacer" />
+          {copyNote && <span className="copy-note">{copyNote}</span>}
+          <button className="btn primary" onClick={copyAll} disabled={openComments === 0} title="未対応のコメントを、SQL の定義位置つきで AI 用のプロンプトとしてコピー">
+            AI 用にコピー{openComments > 0 ? `（${openComments}）` : ""}
+          </button>
+          {tables.length > 0 && (
+            <span className="muted progress">
+              確認済み {reviewedCount}/{tables.length}
+            </span>
+          )}
+          <button className="btn" onClick={() => void load(true)} disabled={loading} title="SQL ファイルを読み直して比較し直す">
+            {loading ? "解析中…" : "再読み込み"}
+          </button>
+        </header>
+
+        <div className={`body ${sel ? "with-panel" : ""}`}>
+          <nav className="side">
+            <input className="filter" placeholder="テーブル・カラムで絞り込み" value={filter} onChange={(e) => setFilter(e.target.value)} />
+            {GROUPS.map((g) => {
+              const items = shown.filter((t) => t.status === g.status);
+              return (
+                <div key={g.status} className="group">
+                  <div className="group-title">
+                    {g.title} <span className="muted">{items.length}</span>
+                  </div>
+                  {items.map((t) => {
+                    const s = tableStats(t);
+                    return (
+                      <button key={t.name} className={`item ${isReviewed(t) ? "reviewed" : ""} ${sel?.name === t.name ? "current" : ""}`} onClick={() => selectTable(t.name)} title={t.name}>
+                        <span className={`mark ${t.status}`}>{t.status === "added" ? "+" : t.status === "removed" ? "−" : "~"}</span>
+                        <span className="iname">
+                          <span className="schema">{t.schema}.</span>
+                          {t.table}
+                        </span>
+                        {t.status === "modified" && (
+                          <span className="stats">
+                            {s.added > 0 && <span className="add">+{s.added}</span>}
+                            {s.removed > 0 && <span className="del">−{s.removed}</span>}
+                            {s.modified > 0 && <span className="mod">~{s.modified}</span>}
+                          </span>
+                        )}
+                        {isReviewed(t) && <span className="check">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            <div className="group">
+              <div className="group-title">
+                値の変化 <span className="muted">{d.values.length}</span>
+              </div>
+              {d.values.map((v, i) => {
+                const target = valueTarget(v);
+                return (
+                  <button key={i} className="item" onClick={() => (target.table ? selectTable(target.table) : v.type && setSelection({ kind: "type", name: v.type }))}>
+                    <span className="mark values">±</span>
+                    <span className="iname">{target.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {comments.length > 0 && (
+              <div className="group">
+                <div className="group-title">
+                  コメント <span className="muted">{comments.length}</span>
+                </div>
+                {comments.map((c) => {
+                  const state = commentState(data, c);
+                  return (
+                    <div
+                      key={c.id}
+                      className={`item comment-item ${state}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => showComment(c.target)}
+                      onKeyDown={(e) => e.key === "Enter" && showComment(c.target)}
+                      title={`${targetLabel(c.target)}\n${c.body}`}
+                    >
+                      <span className="mark cmark">💬</span>
+                      <span className="iname">
+                        <span className="ctarget">{targetLabel(c.target)}</span>
+                        <span className="cline">{c.body.split("\n")[0]}</span>
+                      </span>
+                      {state !== "open" && <span className={`cstate ${state}`}>{STATE_LABEL[state]}</span>}
+                      <button
+                        className="cdel"
+                        aria-label="削除"
+                        title="このコメントを削除"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          api.remove(c.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {types.length > 0 && (
+              <div className="group">
+                <div className="group-title">
+                  型 <span className="muted">{types.length}</span>
+                </div>
+                {types.map((t) => (
+                  <button key={t.change.name} className={`item ${sel?.name === t.change.name ? "current" : ""}`} onClick={() => setSelection({ kind: "type", name: t.change.name })}>
+                    <span className={`mark ${t.change.status}`}>{t.change.status === "added" ? "+" : t.change.status === "removed" ? "−" : "~"}</span>
+                    <span className="iname">{t.change.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="side-foot muted">
+              <div>変更のないテーブル {d.unchangedTables}</div>
+              <details>
+                <summary>
+                  スキーマ {data.target.files.length} ファイル（{data.schemaFrom.kind === "atlas" ? data.schemaFrom.configs.join(", ") : "--schema"}）
+                </summary>
+                <ul>
+                  {data.target.files.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              </details>
+              {data.ignored.length > 0 && (
+                <details>
+                  <summary>比較していない文 {data.ignored.reduce((n, i) => n + i.count, 0)}</summary>
+                  <ul>
+                    {data.ignored.map((i) => (
+                      <li key={i.statement}>
+                        {i.statement} {i.count}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          </nav>
+
+          <main className="canvas">
+            <div className="toolbar">
+              <div className="seg">
+                <button className={mode === "changes" ? "on" : ""} onClick={() => setMode("changes")} title="変更したテーブルと、その外部キーの参照先だけ">
+                  変更まわり
+                </button>
+                <button className={mode === "all" ? "on" : ""} onClick={() => setMode("all")} title="すべてのテーブル">
+                  全体
+                </button>
+              </div>
+              <button className="btn" onClick={() => diagram.current?.fit()} title="図全体を画面に収める">
+                全体を表示
+              </button>
+              <button className="btn icon" onClick={() => diagram.current?.zoom(1.25)} aria-label="拡大">
+                +
+              </button>
+              <button className="btn icon" onClick={() => diagram.current?.zoom(0.8)} aria-label="縮小">
+                −
+              </button>
+              <span className="muted hint" title="スクロールでも移動できます。トラックパッドのピンチでも拡大縮小できます">
+                ドラッグで移動・⌘ / Ctrl + スクロールで拡大・クリックで詳細
+              </span>
+            </div>
+            {(error || data.warnings.length > 0) && (
+              <div className="warnings">
+                {error && <div className="warning">再読み込みに失敗しました: {error}</div>}
+                {data.warnings.map((w, i) => (
+                  <div key={i} className="warning">
+                    {w}
+                  </div>
+                ))}
+              </div>
+            )}
+            {empty && mode === "changes" ? (
+              <div className="empty">スキーマの変更はありません（{data.target.files.length} ファイルを比較しました）</div>
+            ) : (
+              <ErDiagram
+                ref={diagram}
+                tables={data.er}
+                mode={mode}
+                values={valueText}
+                selected={sel?.kind === "table" ? sel.name : null}
+                reviewed={reviewedSet}
+                comments={commentMarks}
+                onSelect={(name) => (name ? selectTable(name, false) : setSelection(null))}
+              />
+            )}
+          </main>
+
+          {sel && (
+            <Details
+              selection={sel}
+              change={selChange}
+              erTable={selEr}
+              values={selValues}
+              type={selType}
+              reviewed={selChange ? isReviewed(selChange) : false}
+              onReviewed={(on) => selChange && setTableReviewed(selChange, on)}
+              known={known}
+              onJump={(name) => selectTable(name)}
+              onClose={() => setSelection(null)}
+            />
+          )}
+        </div>
+      </div>
+    </CommentsContext.Provider>
+  );
+}
