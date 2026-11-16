@@ -1,4 +1,4 @@
-import { COMMENT_STATE_LABEL, CommentInput } from "@diffshape/ui";
+import { COMMENT_STATE_LABEL, CommentCard, CommentComposer, copyText } from "@diffshape/ui";
 import { createContext, useContext, useState } from "react";
 import type { DbShapeResult } from "../../src/model";
 import { commentState, formatPrompt, shortLabel, targetId, type CommentState, type CommentTarget, type ReviewComment } from "./comments";
@@ -17,7 +17,6 @@ export interface CommentsApi {
   add: (t: CommentTarget, body: string) => void;
   update: (id: string, body: string) => void;
   remove: (id: string) => void;
-  copy: (text: string, note: string) => void;
 }
 
 export const CommentsContext = createContext<CommentsApi | null>(null);
@@ -66,54 +65,38 @@ export function CommentThread({ target, colSpan }: { target: CommentTarget; colS
   }
   return (
     <div className="thread" id={`c-${id}`}>
-      {list.map((c) => (api.editing === c.id ? <Composer key={c.id} initial={c.body} onSave={(body) => api.update(c.id, body)} onCancel={() => api.edit(null)} /> : <CommentCard key={c.id} c={c} />))}
+      {list.map((c) => (api.editing === c.id ? <Composer key={c.id} initial={c.body} onSave={(body) => api.update(c.id, body)} onCancel={() => api.edit(null)} /> : <Card key={c.id} c={c} />))}
       {composing && <Composer initial="" onSave={(body) => api.add(target, body)} onCancel={() => api.compose(null)} />}
     </div>
   );
 }
 
-function CommentCard({ c }: { c: ReviewComment }) {
+function Card({ c }: { c: ReviewComment }) {
   const api = useComments()!;
   const state = commentState(api.data, c);
   return (
-    <div className={`ccard ${state}`}>
-      <div className="cbody">{c.body}</div>
-      <div className="cfoot">
-        {state !== "open" && (
-          <span className={`cstate ${state}`} title={state === "updated" ? `コメントしたときは: ${c.snapshot ?? "変更なし"}` : "対象がなくなったか、比較元と同じに戻りました"}>
-            {STATE_LABEL[state]}
-          </span>
-        )}
-        <span className="spacer" />
-        <button className="link" onClick={() => api.copy(formatPrompt(api.data, [c], { includeResolved: true }).text, "コピーしました")} title="このコメントだけ AI 用にコピー">
-          コピー
-        </button>
-        <button className="link" onClick={() => api.edit(c.id)}>
-          編集
-        </button>
-        <button className="link danger" onClick={() => api.remove(c.id)}>
-          削除
-        </button>
-      </div>
-    </div>
+    <CommentCard
+      body={c.body}
+      state={state}
+      stateTitle={state === "updated" ? `コメントしたときは: ${c.snapshot ?? "変更なし"}` : state === "resolved" ? "対象がなくなったか、比較元と同じに戻りました" : undefined}
+      onCopy={() => copyText(formatPrompt(api.data, [c], { includeResolved: true }).text)}
+      onEdit={() => api.edit(c.id)}
+      onDelete={() => api.remove(c.id)}
+    />
   );
 }
 
 function Composer({ initial, onSave, onCancel }: { initial: string; onSave: (body: string) => void; onCancel: () => void }) {
   const [body, setBody] = useState(initial);
-  const save = () => body.trim() && onSave(body.trim());
   return (
-    <div className="composer">
-      <CommentInput autoFocus value={body} placeholder="気になる点や直してほしいこと（⌘ / Ctrl + Enter で保存）" onChange={setBody} onSave={save} onCancel={onCancel} />
-      <div className="cfoot">
-        <span className="spacer" />
-        <button className="btn" onClick={onCancel}>
-          キャンセル
-        </button>
-        <button className="btn primary" onClick={save} disabled={!body.trim()}>
-          保存
-        </button>
-      </div>
-    </div>
+    <CommentComposer
+      autoFocus
+      editing={initial !== ""}
+      value={body}
+      placeholder="気になる点や直してほしいこと"
+      onChange={setBody}
+      onSave={() => body.trim() && onSave(body.trim())}
+      onCancel={onCancel}
+    />
   );
 }
