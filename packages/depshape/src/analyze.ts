@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
-import { listFiles, readFiles, resolveSources, type CompareOptions, type Source } from "@diffshape/core";
+import { listFiles, readFiles, resolveSources, type CompareOptions, type ResolvedSources, type Source } from "@diffshape/core";
 export type { CompareOptions } from "@diffshape/core";
 import { isStdlib, parseGoImports, parseGoModModulePath } from "./go.js";
 import { buildTsProject, isTsFile, isTsTest, parseTsImports, resolveTsImport } from "./ts.js";
@@ -180,7 +180,11 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): { files: FileN
 }
 
 export async function analyze(cwd: string, opts: CompareOptions): Promise<DiffGraph> {
-  const { root, target, base, targetLabel, baseLabel } = await resolveSources(cwd, opts);
+  return analyzeSources(await resolveSources(cwd, opts));
+}
+
+/** The dependency diff of one resolved comparison */
+export async function analyzeSources({ root, target, base, targetLabel, baseLabel }: ResolvedSources): Promise<DiffGraph> {
   const [before, after] = await Promise.all([loadSnapshot(root, base), loadSnapshot(root, target)]);
   const { files, edges, modules } = diffSnapshots(before, after);
   return {

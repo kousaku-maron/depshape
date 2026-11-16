@@ -1,3 +1,4 @@
+import { promptHeader } from "@diffshape/ui";
 import { baseName, moduleOf, type Model, type TreeDir } from "./model";
 import { findLink, resolveSource, sourceLinks, type PanelLink } from "./panel";
 import { pathOf } from "./view";
@@ -124,16 +125,12 @@ export function formatPrompt(
   model: Model,
   tree: Map<string, TreeDir>,
   comments: ReviewComment[],
-  opts: { includeResolved?: boolean } = {},
+  opts: { includeResolved?: boolean; header?: boolean } = {},
 ): { text: string; included: number; skipped: number } {
   const open = opts.includeResolved ? comments : comments.filter((c) => commentState(model, tree, c) !== "resolved");
   const g = model.graph;
-  const out: string[] = [
-    "以下は、依存関係の差分ビューア depshape で付けたレビューコメントです。各指摘に対応してください。",
-    `リポジトリ: ${g.repoRoot}`,
-    `比較: ${g.targetLabel} と ${g.baseLabel} の差分`,
-    "",
-  ];
+  // without the header: a section of the prompt the app combines from every module
+  const out: string[] = opts.header === false ? [] : [...promptHeader(g), "対象: コードの依存関係（depshape）", ""];
   open.forEach((c, i) => {
     const links = c.targets.map(parseKey).filter((t): t is { kind: "link"; from: string; to: string } => t.kind === "link");
     const items = c.targets.map(parseKey).filter((t): t is { kind: "item"; id: string } => t.kind === "item");

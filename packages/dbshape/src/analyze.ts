@@ -1,4 +1,4 @@
-import { listFiles, readFiles, resolveSources, type CompareOptions, type Source } from "@diffshape/core";
+import { listFiles, readFiles, resolveSources, type CompareOptions, type ResolvedSources, type Source } from "@diffshape/core";
 import { loadModule, parseSync } from "libpg-query";
 import { diffSchemas } from "./diff.js";
 import { erTables } from "./er.js";
@@ -8,10 +8,12 @@ import { atlasConfigs, atlasSources, expandSource, matchGlobs } from "./sources.
 
 export type { CompareOptions } from "@diffshape/core";
 
-export interface AnalyzeOptions extends CompareOptions {
+export interface SchemaOptions {
   /** Glob patterns of schema files; when empty, the `src` of atlas.hcl is used */
   schema?: string[];
 }
+
+export interface AnalyzeOptions extends CompareOptions, SchemaOptions {}
 
 interface SideFiles {
   files: string[];
@@ -19,7 +21,7 @@ interface SideFiles {
 }
 
 /** The schema files on one side, in the order Atlas (or the sorted glob) gives them. */
-async function schemaFiles(root: string, source: Source, opts: AnalyzeOptions): Promise<SideFiles> {
+async function schemaFiles(root: string, source: Source, opts: SchemaOptions): Promise<SideFiles> {
   const all = await listFiles(root, source);
   if (opts.schema?.length) return { files: matchGlobs(opts.schema, all), configs: [] };
   const configs = atlasConfigs(all);
@@ -60,7 +62,11 @@ export function locations(before: Schema, after: Schema): Record<string, SourceL
 }
 
 export async function analyze(cwd: string, opts: AnalyzeOptions): Promise<DbShapeResult> {
-  const { root, target, base, targetLabel, baseLabel } = await resolveSources(cwd, opts);
+  return analyzeSources(await resolveSources(cwd, opts), opts);
+}
+
+/** The schema diff of one resolved comparison */
+export async function analyzeSources({ root, target, base, targetLabel, baseLabel }: ResolvedSources, opts: SchemaOptions = {}): Promise<DbShapeResult> {
   const [t, b] = await Promise.all([schemaFiles(root, target, opts), schemaFiles(root, base, opts)]);
   // a file added or removed in the change is read on both sides (and is simply missing on one)
   const files = [...t.files, ...b.files.filter((f) => !t.files.includes(f))];

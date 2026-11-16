@@ -67,7 +67,9 @@ export async function startServer(opts: ServeOptions): Promise<{ server: Server;
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": MIME[extname(rel)] ?? "application/octet-stream" });
+      // index.html names the hashed assets of the current build, so it is always checked again
+      const cache = rel === "index.html" ? { "cache-control": "no-cache" } : {};
+      res.writeHead(200, { "content-type": MIME[extname(rel)] ?? "application/octet-stream", ...cache });
       res.end(body);
     } catch (e) {
       res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });

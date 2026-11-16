@@ -5,10 +5,11 @@ export default defineConfig({
   root: "ui",
   plugins: [react()],
   build: {
-    outDir: "../dist/ui",
+    // dist/bin/*.js serves ../ui
+    outDir: "../dist/bin/ui",
     emptyOutDir: true,
   },
   server: {
-    proxy: { "/api": "http://127.0.0.1:4987" },
+    proxy: { "/api": "http://127.0.0.1:4977" },
   },
 });

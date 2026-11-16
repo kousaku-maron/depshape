@@ -1,4 +1,4 @@
-import { copyText } from "@diffshape/ui";
+import { COMMENT_STATE_LABEL, CommentInput, copyText } from "@diffshape/ui";
 import { forwardRef, useState } from "react";
 import {
   commentState,
@@ -35,7 +35,6 @@ function anchorOf(c: ReviewComment): string {
   return t.kind === "link" ? t.from : t.id;
 }
 
-const STATE_LABEL: Record<CommentState, string> = { open: "未対応", partial: "一部解消", resolved: "解消済み？" };
 
 export interface Draft {
   editingId: string | null;
@@ -121,7 +120,7 @@ export const CommentSidebar = forwardRef<HTMLTextAreaElement, CommentSidebarProp
                   onMouseLeave={() => props.onHoverComment(null)}
                 >
                   <div className="comment-card-head">
-                    <span className={`state ${state}`}>{STATE_LABEL[state]}</span>
+                    <span className={`state ${state}`}>{COMMENT_STATE_LABEL[state]}</span>
                     <span className="muted">{c.targets.length > 1 ? `${c.targets.length}件` : ""}</span>
                   </div>
                   <ul className="comment-targets" onClick={() => props.onShow(c)} title="クリックで図に表示">
@@ -168,22 +167,13 @@ export const CommentSidebar = forwardRef<HTMLTextAreaElement, CommentSidebarProp
             ))
           )}
         </div>
-        <textarea
+        <CommentInput
           ref={inputRef}
           value={draft.body}
           placeholder="指摘を書く（例: usecase を経由する形にしてください）"
-          onChange={(e) => props.onDraft({ ...draft, body: e.target.value })}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              if (canSave) props.onSave();
-            }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              (e.target as HTMLTextAreaElement).blur();
-              props.onCancel();
-            }
-          }}
+          onChange={(body) => props.onDraft({ ...draft, body })}
+          onSave={() => canSave && props.onSave()}
+          onCancel={props.onCancel}
         />
         <div className="composer-actions">
           <span className="muted">⌘Enter で保存 ・ Esc でキャンセル</span>

@@ -38,30 +38,12 @@ importers:
       '@types/react':
         specifier: 18.3.12
         version: 18.3.12
-      '@types/react-dom':
-        specifier: 18.3.1
-        version: 18.3.1
-      '@vitejs/plugin-react':
-        specifier: 4.3.4
-        version: 4.3.4(vite@5.4.11(@types/node@22.20.5))
-      esbuild:
-        specifier: 0.23.1
-        version: 0.23.1
       react:
         specifier: 18.3.1
         version: 18.3.1
-      react-dom:
-        specifier: 18.3.1
-        version: 18.3.1(react@18.3.1)
-      tsx:
-        specifier: 4.19.2
-        version: 4.19.2
       typescript:
         specifier: 5.6.3
         version: 5.6.3
-      vite:
-        specifier: 5.4.11
-        version: 5.4.11(@types/node@22.20.5)
       vitest:
         specifier: 2.1.8
         version: 2.1.8(@types/node@22.20.5)
@@ -71,6 +53,40 @@ importers:
       '@diffshape/core':
         specifier: workspace:*
         version: link:../core
+      '@diffshape/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      '@types/react':
+        specifier: 18.3.12
+        version: 18.3.12
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+      vitest:
+        specifier: 2.1.8
+        version: 2.1.8(@types/node@22.20.5)
+
+  packages/diffshape:
+    dependencies:
+      libpg-query:
+        specifier: 18.2.2
+        version: 18.2.2
+    devDependencies:
+      '@diffshape/core':
+        specifier: workspace:*
+        version: link:../core
+      '@diffshape/dbshape':
+        specifier: workspace:*
+        version: link:../dbshape
+      '@diffshape/depshape':
+        specifier: workspace:*
+        version: link:../depshape
       '@diffshape/ui':
         specifier: workspace:*
         version: link:../ui

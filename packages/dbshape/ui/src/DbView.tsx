@@ -1,5 +1,5 @@
-import { copyText } from "@diffshape/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { copyText, type ModuleViewProps } from "@diffshape/ui";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
 import { commentState, formatPrompt, loadComments, newComment, saveComments, targetId, targetLabel, type CommentTarget, type ReviewComment } from "./comments";
 import { CommentsContext, STATE_LABEL, type CommentsApi } from "./CommentViews";
@@ -8,12 +8,6 @@ import { ErDiagram, type ErDiagramHandle } from "./ErDiagram";
 import type { Mode } from "./erLayout";
 import { loadReviewed, saveReviewed } from "./reviewed";
 import { hashOf, matchesFilter, tableStats, valueChips, valueTarget, type Status } from "./view";
-
-async function fetchDiff(refresh: boolean): Promise<DbShapeResult> {
-  const res = await fetch(`/api/diff${refresh ? "?refresh=1" : ""}`);
-  if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as DbShapeResult;
-}
 
 /** Reviewed marks are kept per repository and comparison */
 const scopeOf = (d: DbShapeResult) => `${d.repoRoot}|${d.base.label}|${d.target.label}`;
@@ -24,50 +18,35 @@ const GROUPS: { status: Status; title: string }[] = [
   { status: "removed", title: "削除したテーブル" },
 ];
 
-export function App() {
-  const [data, setData] = useState<DbShapeResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+export function DbView({ data, active, onComments }: ModuleViewProps<DbShapeResult>) {
+  const scope = scopeOf(data);
   const [filter, setFilter] = useState("");
   const [mode, setMode] = useState<Mode>("changes");
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [reviewed, setReviewed] = useState<Record<string, string>>({});
-  const [comments, setComments] = useState<ReviewComment[]>([]);
+  const [reviewed, setReviewed] = useState<Record<string, string>>(() => loadReviewed(scope));
+  const [comments, setComments] = useState<ReviewComment[]>(() => loadComments(scope));
   const [composing, setComposing] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [copyNote, setCopyNote] = useState<string | null>(null);
   const diagram = useRef<ErDiagramHandle>(null);
 
-  const load = useCallback(async (refresh: boolean) => {
-    setLoading(true);
-    try {
-      const d = await fetchDiff(refresh);
-      // set together so the first render already knows which tables are reviewed
-      setReviewed(loadReviewed(scopeOf(d)));
-      setComments(loadComments(scopeOf(d)));
-      setData(d);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    void load(false);
-  }, [load]);
-
-  useEffect(() => {
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       // Esc in a comment box only closes the box
       if (e.key === "Escape" && !(e.target instanceof HTMLElement && e.target.closest("textarea, input"))) setSelection(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [active]);
 
-  const tables = data?.diff.tables ?? [];
+  // tell the shell how many comments are open, and how to copy them
+  useEffect(() => {
+    const open = comments.filter((c) => commentState(data, c) !== "resolved").length;
+    onComments({ open, prompt: () => formatPrompt(data, comments, { header: false }).text });
+  }, [data, comments, onComments]);
+
+  const tables = data.diff.tables;
   const known = useMemo(() => new Set(tables.map((t) => t.name)), [tables]);
   const isReviewed = (t: TableChange) => reviewed[t.name] === hashOf(t);
   const reviewedSet = useMemo(() => new Set(tables.filter((t) => reviewed[t.name] === hashOf(t)).map((t) => t.name)), [tables, reviewed]);
@@ -75,7 +54,7 @@ export function App() {
   // value changes as hover text on the diagram's column rows
   const valueText = useMemo(() => {
     const m = new Map<string, string>();
-    for (const v of data?.diff.values ?? []) {
+    for (const v of data.diff.values) {
       const text = valueChips(v.before, v.after)
         .map((c) => (c.status === "added" ? `+${c.value}` : c.status === "removed" ? `−${c.value}` : c.value))
         .join("  ");
@@ -89,7 +68,6 @@ export function App() {
   const commentMarks = useMemo(() => {
     const tables = new Map<string, number>();
     const columns = new Set<string>();
-    if (!data) return { tables, columns };
     for (const c of comments) {
       if (commentState(data, c) === "resolved" || !c.target.table) continue;
       tables.set(c.target.table, (tables.get(c.target.table) ?? 0) + 1);
@@ -98,10 +76,6 @@ export function App() {
     return { tables, columns };
   }, [data, comments]);
 
-  if (error && !data) return <div className="fatal">読み込めませんでした: {error}</div>;
-  if (!data) return <div className="fatal muted">解析中…</div>;
-
-  const scope = scopeOf(data);
   const d = data.diff;
   const setTableReviewed = (t: TableChange, on: boolean) => {
     const next = { ...reviewed };
@@ -153,17 +127,12 @@ export function App() {
     remove: (id) => setAndSave(comments.filter((c) => c.id !== id)),
     copy: (text, note) => void copy(text, note),
   };
-  const copyAll = () => {
-    const { text, included, skipped } = formatPrompt(data, comments);
-    void copy(text, `${included} 件をコピーしました${skipped ? `（解消済み？の ${skipped} 件は除外）` : ""}`);
-  };
   /** Shows a comment: selects its table (or type) and scrolls the panel to it */
   const showComment = (t: CommentTarget) => {
     if (t.table) selectTable(t.table);
     else setSelection({ kind: "type", name: t.name });
     window.setTimeout(() => document.getElementById(`c-${targetId(t)}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
   };
-  const openComments = comments.filter((c) => commentState(data, c) !== "resolved").length;
 
   const shown = tables.filter((t) => matchesFilter(t, filter));
   const types = [
@@ -182,12 +151,6 @@ export function App() {
     <CommentsContext.Provider value={api}>
       <div className="app">
         <header className="top">
-          <span className="brand">dbshape</span>
-          <span className="compare">
-            <b>{data.target.label}</b>
-            <span className="muted"> vs </span>
-            <b>{data.base.label}</b>
-          </span>
           <span className="counts">
             <span className="badge added">新規 {tables.filter((t) => t.status === "added").length}</span>
             <span className="badge modified">変更 {tables.filter((t) => t.status === "modified").length}</span>
@@ -196,17 +159,11 @@ export function App() {
           </span>
           <span className="spacer" />
           {copyNote && <span className="copy-note">{copyNote}</span>}
-          <button className="btn primary" onClick={copyAll} disabled={openComments === 0} title="未対応のコメントを、SQL の定義位置つきで AI 用のプロンプトとしてコピー">
-            AI 用にコピー{openComments > 0 ? `（${openComments}）` : ""}
-          </button>
           {tables.length > 0 && (
             <span className="muted progress">
               確認済み {reviewedCount}/{tables.length}
             </span>
           )}
-          <button className="btn" onClick={() => void load(true)} disabled={loading} title="SQL ファイルを読み直して比較し直す">
-            {loading ? "解析中…" : "再読み込み"}
-          </button>
         </header>
 
         <div className={`body ${sel ? "with-panel" : ""}`}>
@@ -358,9 +315,8 @@ export function App() {
                 ドラッグで移動・⌘ / Ctrl + スクロールで拡大・クリックで詳細
               </span>
             </div>
-            {(error || data.warnings.length > 0) && (
+            {data.warnings.length > 0 && (
               <div className="warnings">
-                {error && <div className="warning">再読み込みに失敗しました: {error}</div>}
                 {data.warnings.map((w, i) => (
                   <div key={i} className="warning">
                     {w}

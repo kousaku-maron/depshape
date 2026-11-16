@@ -1,3 +1,4 @@
+import { COMMENT_STATE_LABEL, CommentInput } from "@diffshape/ui";
 import { createContext, useContext, useState } from "react";
 import type { DbShapeResult } from "../../src/model";
 import { commentState, formatPrompt, shortLabel, targetId, type CommentState, type CommentTarget, type ReviewComment } from "./comments";
@@ -23,7 +24,7 @@ export const CommentsContext = createContext<CommentsApi | null>(null);
 
 const useComments = () => useContext(CommentsContext);
 
-export const STATE_LABEL: Record<CommentState, string> = { open: "未対応", updated: "コメント後に変更あり", resolved: "解消済み？" };
+export const STATE_LABEL: Record<CommentState, string> = COMMENT_STATE_LABEL;
 
 /** 💬 on a row: starts a comment, and shows how many there are */
 export function CommentButton({ target, label }: { target: CommentTarget; label?: string }) {
@@ -103,22 +104,7 @@ function Composer({ initial, onSave, onCancel }: { initial: string; onSave: (bod
   const save = () => body.trim() && onSave(body.trim());
   return (
     <div className="composer">
-      <textarea
-        autoFocus
-        value={body}
-        placeholder="気になる点や直してほしいこと（⌘ / Ctrl + Enter で保存）"
-        onChange={(e) => setBody(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            save();
-          }
-          if (e.key === "Escape") {
-            e.stopPropagation();
-            onCancel();
-          }
-        }}
-      />
+      <CommentInput autoFocus value={body} placeholder="気になる点や直してほしいこと（⌘ / Ctrl + Enter で保存）" onChange={setBody} onSave={save} onCancel={onCancel} />
       <div className="cfoot">
         <span className="spacer" />
         <button className="btn" onClick={onCancel}>

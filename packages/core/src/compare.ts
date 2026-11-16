@@ -9,10 +9,16 @@ export interface CompareOptions {
   mergeBase?: boolean;
 }
 
-export async function resolveSources(
-  cwd: string,
-  opts: CompareOptions,
-): Promise<{ root: string; target: Source; base: Source; targetLabel: string; baseLabel: string }> {
+/** One comparison: the repository and the two sides, with labels for the screen */
+export interface ResolvedSources {
+  root: string;
+  target: Source;
+  base: Source;
+  targetLabel: string;
+  baseLabel: string;
+}
+
+export async function resolveSources(cwd: string, opts: CompareOptions): Promise<ResolvedSources> {
   const root = await repoRoot(cwd);
   const targetArg = opts.target ?? ".";
 

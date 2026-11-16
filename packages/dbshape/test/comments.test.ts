@@ -99,9 +99,10 @@ describe("formatPrompt", () => {
     expect(skipped).toBe(1);
     expect(text).toBe(
       [
-        "以下は、DB スキーマの差分ビューア dbshape で付けたレビューコメントです。各指摘に対応してください。",
+        "以下は、git の差分のレビュービューア diffshape で付けたレビューコメントです。各指摘に対応してください。",
         "リポジトリ: /repo",
         "比較: 作業ツリー と main の差分",
+        "対象: DB スキーマ（dbshape）",
         "スキーマの SQL: atlas.hcl の src",
         "",
         "1. カラム billing.invoices.price_id（今回追加: uuid）",
@@ -111,5 +112,7 @@ describe("formatPrompt", () => {
         "",
       ].join("\n"),
     );
+    // as a section of the prompt the app combines from every module
+    expect(formatPrompt(reverted, comments, { header: false }).text.split("\n").slice(0, 3)).toEqual(["スキーマの SQL: atlas.hcl の src", "", "1. カラム billing.invoices.price_id（今回追加: uuid）"]);
   });
 });
