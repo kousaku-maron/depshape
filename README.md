@@ -5,7 +5,7 @@ git の差分の「形」を、push 前のローカルレビューで確かめ�
 | パッケージ | 内容 |
 |---|---|
 | [depshape](packages/depshape) | 差分でフォルダ・ファイル間の依存関係がどう変わったかを、既存の構造と並べて可視化します（Go / TypeScript / JavaScript） |
-| dbshape | 差分でデータベースのスキーマ（テーブル・カラム・制約・外部キー・CHECK の値）がどう変わったかを見せます（開発中） |
+| [dbshape](packages/dbshape) | 差分で PostgreSQL のスキーマ（テーブル・カラム・制約・外部キー・CHECK の値）がどう変わったかを見せます（開発中・未公開） |
 
 それぞれ npm の別パッケージとして公開しています。
 
@@ -24,7 +24,9 @@ pnpm typecheck
 pnpm build
 ```
 
-パッケージごとの作業は `pnpm --filter @kousaku-maron/depshape <script>` か、そのフォルダの中で実行します。npm への公開もパッケージのフォルダから行います。
+共通の部分（git の読み取りと比較対象の解決）は `packages/core` にあり、各 CLI のビルド時に取り込みます（npm には公開しません）。
+
+パッケージごとの作業は `pnpm --filter @kousaku-maron/depshape <script>` か、そのフォルダの中で実行します。npm への公開は、パッケージのフォルダで `pnpm publish` を使います（`workspace:*` の依存を書き換えて公開するため。`npm publish` は使いません）。
 
 ## ライセンス
 
