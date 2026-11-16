@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { atlasConfigs, atlasSources, expandSource, globRegex, matchGlobs } from "../src/sources.js";
+import { atlasConfigs, atlasDatabases, atlasEnvs, atlasSources, expandSource, globRegex, matchGlobs, schemaPatterns } from "../src/sources.js";
 
 describe("atlas.hcl", () => {
   it("reads the file:// paths of src, relative to the config", () => {
@@ -20,6 +20,34 @@ describe("atlas.hcl", () => {
     expect(atlasSources("atlas.hcl", `env { src = ["file://./schema.sql"] }`)).toEqual(["schema.sql"]);
   });
 
+  it("reads the src of each env", () => {
+    const hcl = `
+      src = ["file://shared.sql"]
+      env "app" {
+        src = ["file://app/"]
+        migration { dir = "file://migrations/app" }
+      }
+      # env "old" { src = ["file://old.sql"] }
+      env "analytics" { src = "file://analytics.sql" }`;
+    expect(atlasEnvs("db/atlas.hcl", hcl)).toEqual([
+      { name: "", sources: ["db/shared.sql"] },
+      { name: "app", sources: ["db/app"] },
+      { name: "analytics", sources: ["db/analytics.sql"] },
+    ]);
+  });
+
+  it("treats envs that share schema files as one database", () => {
+    const files = ["db/app/a.sql", "db/app/b.sql", "db/analytics.sql"];
+    const hcl = `
+      env "local" { src = ["file://app/"] }
+      env "prod" { src = ["file://app/a.sql"] }
+      env "analytics" { src = ["file://analytics.sql"] }`;
+    expect(atlasDatabases("db/atlas.hcl", hcl, files)).toEqual([
+      { envs: ["local", "prod"], files: ["db/app/a.sql", "db/app/b.sql"] },
+      { envs: ["analytics"], files: ["db/analytics.sql"] },
+    ]);
+  });
+
   it("finds atlas.hcl files outside node_modules and hidden folders", () => {
     expect(atlasConfigs(["db/atlas.hcl", "node_modules/x/atlas.hcl", ".cache/atlas.hcl", "atlas.hcl.bak"])).toEqual(["db/atlas.hcl"]);
   });
@@ -29,6 +57,15 @@ describe("atlas.hcl", () => {
     expect(expandSource("db/s", files)).toEqual(["db/s/a.sql", "db/s/b.sql"]);
     expect(expandSource("db/one.sql", files)).toEqual(["db/one.sql"]);
     expect(expandSource("db/missing", files)).toEqual([]);
+  });
+});
+
+describe("--schema", () => {
+  it("groups name=glob patterns by name, plain globs go to one unnamed database", () => {
+    expect([...schemaPatterns(["billing=db/b/*.sql", "db/x.sql", "billing=db/b2.sql"])]).toEqual([
+      ["billing", ["db/b/*.sql", "db/b2.sql"]],
+      ["", ["db/x.sql"]],
+    ]);
   });
 });
 

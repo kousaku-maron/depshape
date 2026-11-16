@@ -34,6 +34,7 @@ function result(before: string, after: string): DbShapeResult {
   const a = buildSchema([{ path: "db/billing.sql", sql: after }], parse);
   const diff = diffSchemas(b, a);
   return {
+    database: { id: "atlas.hcl", name: "(ルート)" },
     repoRoot: "/repo",
     generatedAt: "",
     base: { label: "main", files: ["db/billing.sql"] },

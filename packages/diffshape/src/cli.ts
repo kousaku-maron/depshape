@@ -1,5 +1,5 @@
 import { openBrowser, type Analyzer, type CompareOptions } from "@diffshape/core";
-import { COLORS, dbAnalyzer, formatSummary, PLAIN, type DbShapeResult } from "@diffshape/dbshape";
+import { COLORS, dbAnalyzer, formatRunSummary, PLAIN, type DbShapeRun } from "@diffshape/dbshape";
 import { depAnalyzer } from "@diffshape/depshape";
 import { App } from "./app.js";
 import { startServer } from "./server.js";
@@ -26,7 +26,8 @@ const COMMON = `  --merge-base       compare-with と target の分岐点を比�
                      リポジトリの構成が見えるので注意）
   --no-open          ブラウザを自動で開かない`;
 
-const SCHEMA = `  --schema <glob>    スキーマの SQL ファイル（複数指定可）。省略時は atlas.hcl の src を読む`;
+const SCHEMA = `  --schema <glob>    スキーマの SQL ファイル（複数指定可）。省略時はリポジトリ内のすべての atlas.hcl の src を読む
+                     DB が複数あるときは --schema billing=services/billing/**/*.sql のように名前を付ける`;
 
 const HELP: Record<"all" | ModuleId, string> = {
   all: `diffshape - git の差分を、コードの依存関係（depshape）と DB スキーマ（dbshape）の形で見せます
@@ -174,7 +175,7 @@ export async function run(command: "diffshape" | "depshape" | "dbshape", argv: s
     if (args.json || args.text) {
       const r = await app.result(analyzers[0].id);
       if ("error" in r) return fail(r.error);
-      if (args.text) process.stdout.write(formatSummary(r.data as DbShapeResult, args.color ? COLORS : PLAIN));
+      if (args.text) process.stdout.write(formatRunSummary(r.data as DbShapeRun, args.color ? COLORS : PLAIN));
       else process.stdout.write(JSON.stringify(r.data, null, 2) + "\n");
       return;
     }

@@ -33,7 +33,7 @@ npx @kousaku-maron/diffshape . main --merge-base
 | `diffshape abc1234` | そのコミット単体の変更 |
 | `diffshape staged` / `diffshape working` | ステージ済み / 未ステージの変更のみ |
 
-オプション: `--merge-base`、`--schema <glob>`（スキーマの SQL ファイル。省略時は `atlas.hcl` の `src` を読みます）、`--only <dep|db>`、`--port <n>`（デフォルト 4977、使用中なら +1）、`--host`、`--no-open`
+オプション: `--merge-base`、`--schema <glob>`（スキーマの SQL ファイル。省略時はリポジトリ内のすべての `atlas.hcl` の `src` を読みます。DB が複数あるときは `--schema billing=services/billing/**/*.sql` のように名前を付けます）、`--only <dep|db>`、`--port <n>`（デフォルト 4977、使用中なら +1）、`--host`、`--no-open`
 
 サーバーはデフォルトで `127.0.0.1` だけで待ち受け、`localhost` / `127.0.0.1` 宛て以外のリクエストは拒否します。`--host 0.0.0.0` などを指定すると、同じネットワークの他の端末からリポジトリの構成とスキーマが見えるので注意してください。
 
@@ -43,6 +43,7 @@ npx @kousaku-maron/diffshape . main --merge-base
 - **ヘッダー**: 比較の対象、「AI 用にコピー」、「再読み込み」。切り替えても、各モジュールで開いていた箱・選んだテーブル・書きかけのコメントはそのまま残ります
 - **AI 用にコピー**: 両方のモジュールの未対応のコメントを、1つのプロンプトにまとめてコピーします（依存は import の状態と既存の依存のパターン、DB は SQL ファイルの定義位置つき）。Claude Code / Codex などにそのまま貼れます
 - **再読み込み**: AI がファイルを書き換えたあとに、両方を解析し直します。開いていた状態はそのまま残ります
+- **DB が複数ある monorepo**: DB モジュールの中で DB を切り替えます（`atlas.hcl` ごと、または名前付きの `--schema` ごと）
 
 それぞれの画面の見方は、[depshape](https://github.com/kousaku-maron/diffshape/tree/main/packages/depshape) と [dbshape](https://github.com/kousaku-maron/diffshape/tree/main/packages/dbshape) の README を見てください。
 

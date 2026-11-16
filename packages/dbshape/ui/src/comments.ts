@@ -1,5 +1,6 @@
 import { loadCommentList, newCommentId, promptHeader, saveCommentList } from "@diffshape/ui";
 import type { ColumnView, DbShapeResult, IndexView, SourceLocation, TableChange } from "../../src/model";
+import { schemaFromText } from "../../src/names";
 import { columnParts, indexText } from "./view";
 
 /*
@@ -188,7 +189,7 @@ export function formatPrompt(data: DbShapeResult, comments: ReviewComment[], opt
   // without the header: a section of the prompt the app combines from every module
   const out: string[] = [
     ...(opts.header === false ? [] : [...promptHeader({ repoRoot: data.repoRoot, targetLabel: data.target.label, baseLabel: data.base.label }), "対象: DB スキーマ（dbshape）"]),
-    data.schemaFrom.kind === "atlas" ? `スキーマの SQL: ${data.schemaFrom.configs.join(", ")} の src` : `スキーマの SQL: ${data.schemaFrom.patterns.join(", ")}`,
+    `スキーマの SQL: ${schemaFromText(data.schemaFrom)}`,
     "",
   ];
   list.forEach((c, i) => {
