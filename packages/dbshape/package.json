@@ -1,5 +1,6 @@
 {
   "name": "@diffshape/dbshape",
+  "version": "0.0.0",
   "private": true,
   "description": "The dbshape module of diffshape: how a git diff changes a PostgreSQL schema, read from the SQL files in the repo. Bundled into the diffshape app, not published on its own.",
   "license": "MIT",

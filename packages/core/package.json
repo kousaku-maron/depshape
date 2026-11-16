@@ -1,5 +1,6 @@
 {
   "name": "@diffshape/core",
+  "version": "0.0.0",
   "private": true,
   "description": "Code shared by the diffshape tools (git reading, comparison targets). Bundled into each CLI, not published.",
   "license": "MIT",

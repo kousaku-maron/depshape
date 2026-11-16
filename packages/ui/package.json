@@ -1,5 +1,6 @@
 {
   "name": "@diffshape/ui",
+  "version": "0.0.0",
   "private": true,
   "description": "Screen parts shared by the diffshape tools (colors, base styles, icons, small helpers). Bundled into each UI, not published.",
   "license": "MIT",
