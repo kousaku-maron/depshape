@@ -26,7 +26,7 @@ export function Details(p: Props) {
     <aside className="panel">
       <div className="panel-head">
         <span className="panel-title">{p.selection.name}</span>
-        <button className="btn icon" onClick={p.onClose} aria-label="閉じる" title="閉じる（Esc）">
+        <button className="ds-btn ds-btn-icon" onClick={p.onClose} aria-label="閉じる" title="閉じる（Esc）">
           ×
         </button>
       </div>

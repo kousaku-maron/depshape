@@ -1,4 +1,4 @@
-import { AreaDivider, useWidth, type CommentReport } from "@diffshape/ui";
+import { AreaDivider, CheckIcon, CommentCount, CommentIcon, useWidth, type CommentReport } from "@diffshape/ui";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { schemaFromText } from "../../src/names";
 import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
@@ -167,8 +167,13 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
           </span>
           <span className="spacer" />
           {tables.length > 0 && (
-            <span className="muted progress">
-              確認済み {reviewedCount}/{tables.length}
+            <span className="ds-progress" title="確認済みにしたテーブル（内容が変わると外れます）">
+              <span>
+                確認済み {reviewedCount} / {tables.length}
+              </span>
+              <span className="ds-progress-bar">
+                <span style={{ width: `${(reviewedCount / tables.length) * 100}%` }} />
+              </span>
             </span>
           )}
         </header>
@@ -185,6 +190,7 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
                   </div>
                   {items.map((t) => {
                     const s = tableStats(t);
+                    const n = commentMarks.tables.get(t.name) ?? 0;
                     return (
                       <button key={t.name} className={`item ${isReviewed(t) ? "reviewed" : ""} ${sel?.name === t.name ? "current" : ""}`} onClick={() => selectTable(t.name)} title={t.name}>
                         <span className={`mark ${t.status}`}>{t.status === "added" ? "+" : t.status === "removed" ? "−" : "~"}</span>
@@ -199,7 +205,8 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
                             {s.modified > 0 && <span className="mod">~{s.modified}</span>}
                           </span>
                         )}
-                        {isReviewed(t) && <span className="check">✓</span>}
+                        {n > 0 && <CommentCount n={n} title="このテーブルへの未対応のコメント" />}
+                        {isReviewed(t) && <CheckIcon size={12} className="check" />}
                       </button>
                     );
                   })}
@@ -237,7 +244,9 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
                       onKeyDown={(e) => e.key === "Enter" && showComment(c.target)}
                       title={`${targetLabel(c.target)}\n${c.body}`}
                     >
-                      <span className="mark cmark">💬</span>
+                      <span className="mark cmark">
+                        <CommentIcon size={12} />
+                      </span>
                       <span className="iname">
                         <span className="ctarget">{targetLabel(c.target)}</span>
                         <span className="cline">{c.body.split("\n")[0]}</span>
@@ -308,7 +317,7 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
 
           <main className="canvas">
             <div className="toolbar">
-              <div className="seg">
+              <div className="ds-seg">
                 <button className={mode === "changes" ? "on" : ""} onClick={() => setMode("changes")} title="変更したテーブルと、その外部キーの参照先だけ">
                   変更まわり
                 </button>
@@ -316,13 +325,13 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
                   全体
                 </button>
               </div>
-              <button className="btn" onClick={() => diagram.current?.fit()} title="図全体を画面に収める">
+              <button className="ds-btn" onClick={() => diagram.current?.fit()} title="図全体を画面に収める">
                 全体を表示
               </button>
-              <button className="btn icon" onClick={() => diagram.current?.zoom(1.25)} aria-label="拡大">
+              <button className="ds-btn ds-btn-icon" onClick={() => diagram.current?.zoom(1.25)} aria-label="拡大">
                 +
               </button>
-              <button className="btn icon" onClick={() => diagram.current?.zoom(0.8)} aria-label="縮小">
+              <button className="ds-btn ds-btn-icon" onClick={() => diagram.current?.zoom(0.8)} aria-label="縮小">
                 −
               </button>
               <span className="muted hint" title="スクロールでも移動できます。トラックパッドのピンチでも拡大縮小できます">

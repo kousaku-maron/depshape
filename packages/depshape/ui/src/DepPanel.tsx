@@ -412,7 +412,7 @@ export function DepPanel(props: DepPanelProps) {
           {hovered ? `${pins.length ? " ＋ " : ""}ホバー中 1` : ""}
         </span>
         <span className="tspacer" />
-        <button onClick={props.onClearPins} disabled={pins.length === 0}>
+        <button className="ds-btn" onClick={props.onClearPins} disabled={pins.length === 0}>
           ピンをすべて外す
         </button>
       </div>

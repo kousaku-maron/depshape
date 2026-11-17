@@ -1,4 +1,4 @@
-import { copyText, promptHeader, type CommentReport, type ShapeModule } from "@diffshape/ui";
+import { copyText, CopyIcon, promptHeader, RefreshIcon, type CommentReport, type ShapeModule } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MODULES } from "./modules";
 
@@ -119,22 +119,24 @@ export function Shell() {
       <header className="shell-head">
         <span className="shell-brand">diffshape</span>
         {modules.length === 1 && <span className="shell-module">{current.title}</span>}
-        <span className="shell-compare" title={info.repoRoot}>
-          <b>{info.targetLabel}</b>
-          <span className="shell-muted"> vs </span>
-          <b>{info.baseLabel}</b>
+        <span className="shell-compare" title={`${info.repoRoot}\n${info.baseLabel} → ${info.targetLabel}`}>
+          <span className="ds-ref">{info.baseLabel}</span>
+          <span className="shell-muted">→</span>
+          <span className="ds-ref">{info.targetLabel}</span>
         </span>
         <span className="shell-spacer" />
         {note && <span className="shell-note">{note}</span>}
         <button
-          className="shell-btn primary"
+          className="ds-btn ds-btn-note"
           onClick={() => void copyAll()}
           disabled={openTotal === 0}
           title={openTotal ? `未対応のコメント（${withComments.map((m) => `${m.title} ${reports[m.id].open}`).join("、")}）を AI 用のプロンプトとしてコピー` : "未対応のコメントはありません"}
         >
+          <CopyIcon size={13} />
           AI 用にコピー{openTotal > 0 ? `（${openTotal}）` : ""}
         </button>
-        <button className="shell-btn" onClick={() => void reload()} disabled={reloading} title="リポジトリを読み直して比較し直す">
+        <button className="ds-btn" onClick={() => void reload()} disabled={reloading} title="リポジトリを読み直して比較し直す">
+          <RefreshIcon size={13} className={reloading ? "shell-spin" : undefined} />
           {reloading ? "解析中…" : "再読み込み"}
         </button>
       </header>

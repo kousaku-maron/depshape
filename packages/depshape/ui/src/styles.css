@@ -49,30 +49,6 @@ code {
   background: var(--bg-soft);
   flex-wrap: wrap;
 }
-.brand {
-  font-weight: 700;
-  font-size: 15px;
-}
-.compare {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.compare .label {
-  color: var(--muted);
-}
-.compare .rev {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 1px 8px;
-}
-.compare .arrow {
-  color: var(--muted);
-}
 .summary {
   display: flex;
   gap: 6px;
@@ -85,9 +61,9 @@ code {
   margin: 0 4px;
 }
 .pill {
-  border-radius: 999px;
-  padding: 0 8px;
-  font-size: 12px;
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font-size: var(--fs-sm);
   font-weight: 600;
 }
 .pill.added,
@@ -110,24 +86,6 @@ code {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-.controls button {
-  border: 1px solid var(--border);
-  background: var(--bg);
-  border-radius: 6px;
-  padding: 2px 10px;
-  cursor: pointer;
-}
-.controls button:hover {
-  background: var(--bg-hover);
-}
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
 }
 
 /* main */
@@ -178,19 +136,9 @@ main {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
-}
-.map-toolbar button {
-  border: 1px solid var(--border);
-  background: var(--bg);
-  border-radius: 6px;
-  padding: 3px 10px;
-  cursor: pointer;
-}
-.map-toolbar button:hover {
-  background: var(--bg-hover);
 }
 .map-scroll {
   overflow: auto;
@@ -230,28 +178,6 @@ main {
   fill: var(--removed);
 }
 
-.segmented {
-  display: inline-flex;
-}
-.map-toolbar .segmented button {
-  border-radius: 0;
-}
-.map-toolbar .segmented button:first-child {
-  border-radius: 6px 0 0 6px;
-}
-.map-toolbar .segmented button:last-child {
-  border-radius: 0 6px 6px 0;
-  border-left: 0;
-}
-.map-toolbar .segmented button.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.map-toolbar button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
 
 /* tree (left) */
 .map-body {
@@ -279,63 +205,52 @@ main {
 .map-scroll.tree {
   height: auto;
   resize: none;
-  padding: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  padding: 6px 6px 10px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: var(--fs);
 }
-.tgroup {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  margin: 3px 0;
-  background: rgba(127, 127, 127, 0.04);
-}
-.tgroup.pruned {
-  background: transparent;
-}
+/* flat rows like difit's file tree: a folder's children hang off a thin guide line */
 .tchildren {
-  padding: 0 4px 4px 14px;
+  margin-left: 10px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
 }
 .trow {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
-  padding: 0 6px;
-  margin: 3px 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
+  height: 24px;
+  padding: 0 6px 0 4px;
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   white-space: nowrap;
 }
 .trow.open {
-  border-color: transparent;
-  background: transparent;
-  margin: 0;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .trow.dir,
 .trow.rest {
   cursor: pointer;
 }
+/* a changed file: a faint tint and a line in its color on the left */
 .trow.file.added {
-  background: var(--added-bg);
-  border-color: var(--added);
+  background: color-mix(in srgb, var(--added-bg) 55%, transparent);
+  border-left-color: var(--added);
 }
 .trow.file.modified {
-  background: var(--modified-bg);
-  border-color: var(--modified);
+  background: color-mix(in srgb, var(--modified-bg) 55%, transparent);
+  border-left-color: var(--modified);
 }
 .trow.file.removed {
-  background: var(--removed-bg);
-  border-color: var(--removed);
+  background: color-mix(in srgb, var(--removed-bg) 55%, transparent);
+  border-left-color: var(--removed);
 }
 .trow.file.removed .tlabel {
   text-decoration: line-through;
 }
 .trow.rest {
-  background: transparent;
-  border-style: dashed;
   color: var(--muted);
   font-style: italic;
 }
@@ -344,10 +259,18 @@ main {
 }
 .trow:hover,
 .trow.hovered {
-  box-shadow: 0 0 0 2px var(--accent) inset;
+  background: var(--bg-hover);
+}
+.trow.file.added:hover,
+.trow.file.added.hovered,
+.trow.file.modified:hover,
+.trow.file.modified.hovered,
+.trow.file.removed:hover,
+.trow.file.removed.hovered {
+  box-shadow: 0 0 0 1px var(--border) inset;
 }
 .trow.pinned {
-  box-shadow: 0 0 0 2px var(--accent) inset;
+  box-shadow: 0 0 0 1px var(--accent) inset;
 }
 .ticon {
   width: 10px;
@@ -358,6 +281,9 @@ main {
 .tlabel {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.tdot {
+  font-size: 8px;
 }
 .tdot.added,
 .tbadge.added,
@@ -374,27 +300,30 @@ main {
   color: var(--removed);
 }
 .tbadge {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 600;
 }
 .tmark {
-  font-size: 11px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  padding: 0 6px;
-  border-radius: 999px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
   border: 1px solid currentColor;
   font-style: normal;
+  line-height: 16px;
 }
 .tspacer {
   flex: 1;
 }
 .tbtn {
+  display: inline-flex;
+  align-items: center;
   border: 0;
   background: none;
   cursor: pointer;
   padding: 0 3px;
   color: var(--muted);
-  font-size: 12px;
   opacity: 0;
 }
 .trow:hover .tbtn,
@@ -402,7 +331,7 @@ main {
 .tbtn.on {
   opacity: 1;
 }
-/* keeps rows aligned where a row has no eye button ("ほか N" rows) */
+/* keeps rows aligned where a row has no pin button ("ほか N" rows) */
 .tbtn-space {
   flex: none;
   width: 20px;
@@ -426,17 +355,6 @@ main {
   gap: 8px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
-}
-.dep-panel-head button {
-  border: 1px solid var(--border);
-  background: var(--bg);
-  border-radius: 6px;
-  padding: 2px 10px;
-  cursor: pointer;
-}
-.dep-panel-head button:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 .dep-panel-empty {
   padding: 24px 16px;
@@ -598,13 +516,9 @@ main {
   fill: var(--muted);
   font-size: 11px;
 }
-.tgroup.rest-group {
-  border-style: dashed;
-  background: transparent;
-}
-.tgroup.rest-group > .trow.rest {
-  border-color: transparent;
-  margin: 0;
+/* the unchanged files of a folder, opened from "ほか N ファイル": a dashed guide line */
+.tgroup.rest-group > .tchildren {
+  border-left-style: dashed;
 }
 .eye,
 .pin-icon {
@@ -635,7 +549,7 @@ main {
   opacity: 0.35;
 }
 .pcomment circle {
-  fill: var(--accent);
+  fill: var(--note);
 }
 .pcomment text {
   fill: #fff;
@@ -650,29 +564,8 @@ main {
   color: var(--accent);
 }
 .trow.picked {
-  box-shadow: 0 0 0 2px var(--accent) inset;
+  box-shadow: 0 0 0 1px var(--accent) inset;
   background: var(--center-bg);
-}
-.tcomment {
-  font-size: 11px;
-  color: var(--accent);
-  font-style: normal;
-}
-.map-toolbar button.on {
-  background: var(--center-bg);
-  border-color: var(--accent);
-}
-button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-button.primary:hover {
-  filter: brightness(1.08);
-  background: var(--accent);
-}
-button.primary:disabled {
-  opacity: 0.5;
 }
 
 
@@ -796,42 +689,14 @@ button.primary:disabled {
 }
 /* two-way highlight between cards and the map */
 .psel.lit {
-  stroke: var(--modified);
+  stroke: var(--note);
   opacity: 0.45;
 }
 .trow.lit {
-  box-shadow: 0 0 0 2px var(--modified) inset;
+  box-shadow: 0 0 0 1px var(--note) inset;
+  background: var(--note-bg);
 }
 
-/* header: comment controls */
-.controls button.on {
-  background: var(--center-bg);
-  border-color: var(--accent);
-}
-.controls button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.controls button.primary:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.copy-all {
-  position: relative;
-}
-.copy-note {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  white-space: nowrap;
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--added);
-  color: #fff;
-  z-index: 10;
-}
 
 /* selected links stand out: everything else fades while a selection is drawn */
 .panel-svg.selecting .plink:not(.selected) .medge {

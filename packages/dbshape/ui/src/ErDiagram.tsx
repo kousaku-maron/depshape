@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { CommentIcon } from "@diffshape/ui";
 import type { ErTable } from "../../src/model";
 import { buildDiagram, edgePath, FOOTER_H, HEADER_H, ROW_H, rowText, STATUS_MARK, type DiagramTable, type Mode } from "./erLayout";
 
@@ -300,9 +301,10 @@ function TableNode({
       {comments > 0 && (
         <g className="er-cbadge" transform={`translate(${t.width - 4} 0)`}>
           <title>コメント {comments} 件</title>
-          <rect x={-16} y={-9} width={32} height={18} rx={9} />
-          <text y={4} textAnchor="middle">
-            💬{comments}
+          <rect x={-17} y={-9} width={34} height={18} rx={9} />
+          <CommentIcon size={10} x={-11} y={-5} />
+          <text x={4} y={4} textAnchor="middle">
+            {comments}
           </text>
         </g>
       )}

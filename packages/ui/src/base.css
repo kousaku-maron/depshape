@@ -1,4 +1,6 @@
 /* Colors and base styles shared by the diffshape tools, so they read the same way. */
+@import "./controls.css";
+
 :root {
   --bg: #ffffff;
   --bg-soft: #f6f8fa;
@@ -14,6 +16,17 @@
   --removed-bg: #ffebe9;
   --modified: #9a6700;
   --modified-bg: #fff8c5;
+  /* review comments (and the AI copy of them) */
+  --note: #9a6700;
+  --note-bg: #fff8c5;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --fs: 12px;
+  --fs-sm: 11px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --control-h: 26px;
   color-scheme: light;
 }
 
@@ -33,6 +46,8 @@
     --removed-bg: rgba(248, 81, 73, 0.16);
     --modified: #d29922;
     --modified-bg: rgba(187, 128, 9, 0.18);
+    --note: #d29922;
+    --note-bg: rgba(187, 128, 9, 0.14);
     color-scheme: dark;
   }
 }
@@ -51,13 +66,7 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font:
-    13px/1.5 -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    "Hiragino Sans",
-    "Noto Sans JP",
-    sans-serif;
+  font: 13px/1.5 var(--font-sans);
 }
 
 button {

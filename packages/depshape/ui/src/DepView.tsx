@@ -1,4 +1,4 @@
-import { loadCommentList, loadJSON, saveCommentList, saveJSON, useStoredSet, type ModuleViewProps } from "@diffshape/ui";
+import { CommentIcon, loadCommentList, loadJSON, saveCommentList, saveJSON, useStoredSet, type ModuleViewProps } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DiffGraph, FileNode } from "../../src/types";
 import { commentState, formatPrompt, type ReviewComment } from "./comments";
@@ -102,11 +102,12 @@ export function DepView({ data: graph, active, onComments }: ModuleViewProps<Dif
           <span className="pill removed">−{edgeCounts.removed} 依存</span>
         </div>
         <div className="controls">
-          <button className={sidebarOpen ? "on" : ""} onClick={() => setSidebarOpen(!sidebarOpen)} title="コメントのサイドバーを開閉">
-            💬 {comments.length}
+          <button className={`ds-btn${sidebarOpen ? " on" : ""}`} onClick={() => setSidebarOpen(!sidebarOpen)} title="コメントのサイドバーを開閉">
+            <CommentIcon size={13} />
+            コメント {comments.length}
             {comments.length > 0 && <span className="muted">（未対応 {openCount}）</span>}
           </button>
-          <label className="toggle">
+          <label className="ds-check">
             <input
               type="checkbox"
               checked={includeExternal}
