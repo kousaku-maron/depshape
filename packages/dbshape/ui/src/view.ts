@@ -11,6 +11,9 @@ export interface Stats {
 }
 
 /** How many columns, constraints and indexes of a table were added / removed / changed. */
+/** The tooltip of a table's counts: what changed among its columns, constraints and indexes */
+export const changeTitle = (s: Stats) => `カラム・制約・インデックス：追加 ${s.added}・削除 ${s.removed}・変更 ${s.modified}`;
+
 export function tableStats(t: TableChange): Stats {
   const s: Stats = { added: 0, removed: 0, modified: 0 };
   for (const x of [...t.columns, ...t.constraints, ...t.indexes]) s[x.status]++;
@@ -93,13 +96,7 @@ export function indexText(i: IndexView): string {
   return `${i.unique ? "UNIQUE " : ""}INDEX ${indexBody(i)}`;
 }
 
-/** A short stable hash of a value (to notice that a table marked as reviewed changed again). */
-export function hashOf(v: unknown): string {
-  const s = JSON.stringify(v);
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(36);
-}
+export { hashOf } from "@diffshape/ui";
 
 /** Whether a table matches the filter text (name, schema or any changed column name). */
 export function matchesFilter(t: TableChange, q: string): boolean {
@@ -108,4 +105,3 @@ export function matchesFilter(t: TableChange, q: string): boolean {
   return t.name.toLowerCase().includes(s) || t.columns.some((c) => c.name.toLowerCase().includes(s));
 }
 
-export const STATUS_LABEL: Record<Status, string> = { added: "新規", removed: "削除", modified: "変更" };

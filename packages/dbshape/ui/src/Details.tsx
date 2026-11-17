@@ -2,7 +2,7 @@ import type { DomainChange, EnumChange, ErTable, TableChange, ValueChange } from
 import { tableTarget, type CommentTarget } from "./comments";
 import { CommentButton, CommentThread } from "./CommentViews";
 import { PlainColumn, TableCard } from "./TableCard";
-import { STATUS_LABEL, valueChips, valueTarget } from "./view";
+import { valueChips, valueTarget } from "./view";
 
 /* The panel on the right: details of the selected table (or type), which the ER diagram can not show. */
 
@@ -118,8 +118,7 @@ function TypeRow({ kind, change: c }: { kind: "ENUM 型" | "DOMAIN"; change: Enu
   return (
     <div className="value-row commentable">
       <CommentButton target={ct} />
-      <div className="value-head">
-        <span className={`badge ${c.status}`}>{STATUS_LABEL[c.status]}</span>
+      <div className={`value-head tinted ${c.status}`}>
         <span className="vname">{c.name}</span>
         <span className="tag kind">{kind}</span>
       </div>

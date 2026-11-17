@@ -246,7 +246,6 @@ function TableNode({
       <rect className="er-head" width={t.width} height={HEADER_H} rx={6} />
       <rect className="er-head-fill" y={HEADER_H - 6} width={t.width} height={6} />
       <text className="er-title" x={10} y={18}>
-        {s !== "unchanged" && <tspan className={`er-mark ${s}`}>{STATUS_MARK[s]} </tspan>}
         <tspan className="er-schema">{t.table.schema}.</tspan>
         <tspan>{t.table.table}</tspan>
       </text>

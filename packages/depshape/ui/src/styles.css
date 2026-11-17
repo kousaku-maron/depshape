@@ -60,23 +60,18 @@ code {
   background: var(--border);
   margin: 0 4px;
 }
-.pill {
-  border-radius: var(--radius-sm);
-  padding: 1px 6px;
+.summary .slabel {
+  color: var(--muted);
   font-size: var(--fs-sm);
-  font-weight: 600;
 }
-.pill.added,
 .mini.added {
   color: var(--added);
   background: var(--added-bg);
 }
-.pill.removed,
 .mini.removed {
   color: var(--removed);
   background: var(--removed-bg);
 }
-.pill.modified,
 .mini.modified {
   color: var(--modified);
   background: var(--modified-bg);
@@ -282,37 +277,6 @@ main {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tdot {
-  font-size: 8px;
-}
-.tdot.added,
-.tbadge.added,
-.tmark.added {
-  color: var(--added);
-}
-.tdot.modified,
-.tbadge.modified {
-  color: var(--modified);
-}
-.tdot.removed,
-.tbadge.removed,
-.tmark.removed {
-  color: var(--removed);
-}
-.tbadge {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-.tmark {
-  font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  padding: 0 5px;
-  border-radius: var(--radius-sm);
-  border: 1px solid currentColor;
-  font-style: normal;
-  line-height: 16px;
-}
 .tspacer {
   flex: 1;
 }
@@ -338,6 +302,24 @@ main {
 }
 .tbtn:hover {
   color: var(--accent);
+}
+/* reviewed (確認済み): faded like dbshape's tables, with a check in the review column */
+.trow.reviewed .tlabel,
+.trow.reviewed .ds-status,
+.trow.reviewed .ds-change {
+  opacity: 0.45;
+}
+.tbtn.treview.on,
+.tbtn.treview.on:hover,
+.tcheck {
+  color: var(--added);
+}
+.tcheck {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
 }
 
 /* dependency panel (right) */
