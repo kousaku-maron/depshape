@@ -2,11 +2,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { CommentSidebar, type Draft } from "./CommentViews";
 import { commentState, itemKey, parseKey, type ReviewComment } from "./comments";
 import { DepPanel } from "./DepPanel";
-import { AreaDivider, PinIcon, useWidth } from "@diffshape/ui";
+import { AreaDivider, CommentCount, CommentIcon, PinIcon, useWidth } from "@diffshape/ui";
 import { unhide } from "./hide";
 import { clampLayout, DEFAULT_SIDE, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { parentDir, type Model, type TreeDir } from "./model";
-import { buildAllView, buildChangesView, type MapMode, type View, type ViewNode } from "./view";
+import { buildAllView, buildChangesView, pathOf, type MapMode, type View, type ViewNode } from "./view";
 
 /*
  * The dependency map: a file tree on the left (no arrows), and a panel on the
@@ -121,6 +121,17 @@ export function DepMap(props: DepMapProps) {
     for (const c of openComments) for (const k of c.targets) m.set(k, (m.get(k) ?? 0) + 1);
     return m;
   }, [openComments]);
+  /** A folded folder row: how many open comments point at something inside it (a row, or a link from it) */
+  const innerComments = (dir: string) => {
+    const inside = (p: string) => dir === "" || p.startsWith(dir + "/");
+    return openComments.filter((c) =>
+      c.targets.some((k) => {
+        const t = parseKey(k);
+        // a link belongs to the row it was drawn from (for an "used by" link: the row it points at)
+        return inside(pathOf(t.kind === "item" ? t.id : t.from.startsWith("i:") ? t.to : t.from));
+      }),
+    ).length;
+  };
 
   // focus right away when the sidebar is already open, otherwise once it has rendered
   const focusInput = () => {
@@ -294,6 +305,9 @@ export function DepMap(props: DepMapProps) {
     const text = n.kind === "file" || n.kind === "rest" ? n.label : `${n.label}/`;
     const m = (n.kind === "open" && !n.collapsed) || (n.kind === "rest" && n.full) ? undefined : marks.get(n.id);
     const isPinned = pinned.has(n.id);
+    const own = commentCounts.get(itemKey(n.id)) ?? 0;
+    const folded = n.kind === "dir" || (n.kind === "open" && n.collapsed);
+    const comments = own || (folded ? innerComments(n.path) : 0);
     const cls = [
       "trow",
       n.kind,
@@ -338,11 +352,7 @@ export function DepMap(props: DepMapProps) {
             −{m.removed} 依存
           </span>
         )}
-        {(commentCounts.get(itemKey(n.id)) ?? 0) > 0 && (
-          <span className="tcomment" title="この行へのコメント">
-            💬 {commentCounts.get(itemKey(n.id))}
-          </span>
-        )}
+        {comments > 0 && <CommentCount n={comments} title={own ? "この行へのコメント" : "この中のファイルへのコメント（未対応）"} />}
         <button
           className="tbtn"
           onClick={stop(() => {
@@ -351,8 +361,9 @@ export function DepMap(props: DepMapProps) {
             focusInput();
           })}
           title="この行にコメントを書く（⌘ / Shift + クリックで複数選択）"
+          aria-label="コメントする"
         >
-          💬
+          <CommentIcon size={13} />
         </button>
         {n.kind === "rest" ? (
           // "ほか N フォルダ・M ファイル" is a fold in the tree, not a thing to compare; pin the folder and open it instead
@@ -390,7 +401,7 @@ export function DepMap(props: DepMapProps) {
   return (
     <div className="map">
       <div className="map-toolbar">
-        <div className="segmented" role="group" aria-label="表示範囲">
+        <div className="ds-seg" role="group" aria-label="表示範囲">
           <button className={mode === "changes" ? "on" : ""} onClick={() => props.onModeChange("changes")} title="変更したファイルと、その依存先だけを表示">
             変更まわり
           </button>
@@ -400,15 +411,19 @@ export function DepMap(props: DepMapProps) {
         </div>
         {mode === "all" ? (
           <>
-            <button onClick={props.onExpandChanged}>変更箇所をすべて開く</button>
-            <button onClick={props.onCollapseAll}>すべて閉じる</button>
+            <button className="ds-btn" onClick={props.onExpandChanged}>
+              変更箇所をすべて開く
+            </button>
+            <button className="ds-btn" onClick={props.onCollapseAll}>
+              すべて閉じる
+            </button>
           </>
         ) : (
           <>
-            <button onClick={props.onExpandAll} disabled={props.collapsed.size === 0} title="閉じたフォルダをすべて開く">
+            <button className="ds-btn" onClick={props.onExpandAll} disabled={props.collapsed.size === 0} title="閉じたフォルダをすべて開く">
               すべて開く
             </button>
-            <button onClick={props.onCollapseAll} disabled={open.size === 0} title="「ほか N ファイル」で開いたものを閉じる">
+            <button className="ds-btn" onClick={props.onCollapseAll} disabled={open.size === 0} title="「ほか N ファイル」で開いたものを閉じる">
               変更まわりだけに戻す
             </button>
           </>
@@ -484,7 +499,7 @@ export function DepMap(props: DepMapProps) {
       </div>
       <div className="legend">
         <span className="muted">
-          行にホバーすると右のパネルに依存先が出ます ・ ピンのアイコンでピン留めし、複数並べて比べられます ・ 矢印や箱のクリック（⌘ / Shift で複数）・行の 💬 でコメント（c キーで入力欄へ）・ 「+n
+          行にホバーすると右のパネルに依存先が出ます ・ ピンのアイコンでピン留めし、複数並べて比べられます ・ 矢印や箱のクリック（⌘ / Shift で複数）・行の吹き出しでコメント（c キーで入力欄へ）・ 「+n
           依存」= 今回増えた import ・{mode === "changes" ? " 「ほか N ファイル」= 変更のない既存ファイル（クリックで展開）" : " フォルダをクリックで開閉"}
         </span>
       </div>

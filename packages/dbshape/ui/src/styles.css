@@ -57,14 +57,6 @@ ins,
   flex-wrap: wrap;
 }
 
-.brand {
-  font-weight: 600;
-}
-
-.compare b {
-  font-weight: 500;
-}
-
 .counts {
   display: flex;
   gap: 6px;
@@ -72,23 +64,6 @@ ins,
 
 .spacer {
   flex: 1;
-}
-
-.btn {
-  border: 1px solid var(--border);
-  background: var(--bg);
-  border-radius: 6px;
-  padding: 3px 10px;
-  cursor: pointer;
-}
-
-.btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-
-.btn:disabled {
-  color: var(--muted);
-  cursor: default;
 }
 
 /* list | line | diagram | line | panel; the widths come from the dragged lines (layout.ts) */
@@ -115,7 +90,7 @@ ins,
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
@@ -123,34 +98,6 @@ ins,
 .toolbar .hint {
   font-size: 11px;
   margin-left: 6px;
-}
-
-.seg {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.seg button {
-  border: none;
-  background: var(--bg);
-  padding: 3px 10px;
-  cursor: pointer;
-}
-
-.seg button + button {
-  border-left: 1px solid var(--border);
-}
-
-.seg button.on {
-  background: var(--accent-bg);
-  color: var(--accent);
-}
-
-.btn.icon {
-  width: 28px;
-  padding: 3px 0;
 }
 
 .warnings {
@@ -477,9 +424,10 @@ ins,
 /* ---- badges and marks */
 
 .badge {
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 10px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
@@ -606,8 +554,8 @@ tr.modified .mark,
 }
 
 .item .check {
+  flex: none;
   color: var(--added);
-  font-size: 11px;
 }
 
 .side-foot {
@@ -1016,13 +964,16 @@ table.cols td:last-child,
   right: 4px;
   border: 1px solid transparent;
   background: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  color: var(--muted);
   font-size: 12px;
-  line-height: 20px;
   cursor: pointer;
   opacity: 0;
-  filter: grayscale(1);
 }
 
 tr:hover > td > .cbtn,
@@ -1035,20 +986,18 @@ tr:hover > td > .cbtn,
 
 .cbtn:hover {
   opacity: 1 !important;
-  filter: none;
+  color: var(--note);
   border-color: var(--border);
   background: var(--bg);
 }
 
 .cbtn.has {
   opacity: 1;
-  filter: none;
+  color: var(--note);
 }
 
 .cnum {
-  margin-left: 2px;
-  font-size: 11px;
-  color: var(--accent);
+  font-size: var(--fs-sm);
   font-weight: 600;
 }
 
@@ -1139,8 +1088,10 @@ tr:hover > td > .cbtn,
 }
 
 .cmark {
-  font-size: 11px;
-  line-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  color: var(--note);
 }
 
 .cdel {
@@ -1162,11 +1113,15 @@ tr:hover > td > .cbtn,
 
 /* marks on the diagram */
 .er-cdot {
-  fill: var(--accent);
+  fill: var(--note);
+}
+
+.er-cbadge {
+  color: #fff;
 }
 
 .er-cbadge rect {
-  fill: var(--accent);
+  fill: var(--note);
 }
 
 .er-cbadge text {
@@ -1200,10 +1155,11 @@ tr:hover > td > .cbtn,
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  height: var(--control-h);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: var(--bg);
-  padding: 2px 8px;
+  padding: 0 8px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1223,14 +1179,14 @@ tr:hover > td > .cbtn,
 }
 
 [data-module="db"] .db-name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs);
 }
 
 [data-module="db"] .db-count {
   min-width: 16px;
   padding: 0 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--modified-bg);
   color: var(--modified);
   font-size: 11px;

@@ -1,4 +1,4 @@
-import { COMMENT_STATE_LABEL, CommentCard, CommentComposer, copyText } from "@diffshape/ui";
+import { COMMENT_STATE_LABEL, CommentCard, CommentComposer, CommentIcon, copyText } from "@diffshape/ui";
 import { createContext, useContext, useState } from "react";
 import type { DbShapeResult } from "../../src/model";
 import { commentState, formatPrompt, shortLabel, targetId, type CommentState, type CommentTarget, type ReviewComment } from "./comments";
@@ -25,7 +25,7 @@ const useComments = () => useContext(CommentsContext);
 
 export const STATE_LABEL: Record<CommentState, string> = COMMENT_STATE_LABEL;
 
-/** 💬 on a row: starts a comment, and shows how many there are */
+/** The speech bubble on a row: starts a comment, and shows how many there are */
 export function CommentButton({ target, label }: { target: CommentTarget; label?: string }) {
   const api = useComments();
   if (!api) return null;
@@ -41,7 +41,8 @@ export function CommentButton({ target, label }: { target: CommentTarget; label?
       title={`${label ?? shortLabel(target)} にコメントする`}
       aria-label="コメントする"
     >
-      💬{n > 0 && <span className="cnum">{n}</span>}
+      <CommentIcon size={12} />
+      {n > 0 && <span className="cnum">{n}</span>}
     </button>
   );
 }

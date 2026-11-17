@@ -1,0 +1,201 @@
+/*
+ * Small controls shared by the shell and the modules, so a button or a toggle looks the same
+ * everywhere: buttons, segmented toggles, a revision label, the comment count and a progress bar.
+ */
+
+/* ---- buttons */
+
+.ds-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: var(--control-h);
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ds-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.ds-btn:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.ds-btn svg {
+  flex: none;
+}
+
+/* a square button with one sign or icon (zoom, close) */
+.ds-btn-icon {
+  width: var(--control-h);
+  padding: 0;
+  font-size: 14px;
+}
+
+/* a toggle button that is on */
+.ds-btn.on {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.ds-btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.ds-btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.1);
+}
+
+.ds-btn-primary:disabled {
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--muted);
+}
+
+/* the AI copy: amber, like the comments it copies */
+.ds-btn-note {
+  border-color: var(--note);
+  background: var(--note-bg);
+  color: var(--note);
+}
+
+.ds-btn-note:hover:not(:disabled) {
+  background: var(--note-bg);
+  filter: brightness(1.15);
+}
+
+.ds-btn-note:disabled {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+/* ---- segmented toggle: one of a few views */
+
+.ds-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+}
+
+.ds-seg > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: calc(var(--control-h) - 6px);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ds-seg > button:hover {
+  color: var(--text);
+}
+
+.ds-seg > button.on {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+/* ---- a revision (branch, commit, working tree) */
+
+.ds-ref {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- a check box with its label */
+
+.ds-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs);
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ds-check input {
+  margin: 0;
+  accent-color: var(--added);
+}
+
+/* ---- how many comments a row has */
+
+.ds-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  color: var(--note);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* ---- progress (reviewed n of m) */
+
+.ds-progress {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 110px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 1;
+}
+
+.ds-progress-bar {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.ds-progress-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--added);
+  transition: width 0.2s;
+}
