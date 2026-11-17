@@ -59,7 +59,31 @@ ins,
 
 .counts {
   display: flex;
+  align-items: center;
   gap: 6px;
+}
+
+.counts .slabel {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.counts .sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.counts .vcount {
+  color: var(--values);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.counts .vcount.zero {
+  color: var(--muted);
+  font-weight: 400;
 }
 
 .spacer {
@@ -287,6 +311,11 @@ ins,
   font-weight: 600;
 }
 
+/* the status shows in the box's color; a removed table's name is struck through, as in the list */
+.er-table.removed .er-title {
+  text-decoration: line-through;
+}
+
 .er-schema,
 .er-table .er-type,
 .er-null,
@@ -480,24 +509,6 @@ tr.modified .mark,
   color: var(--values);
 }
 
-.stats {
-  display: inline-flex;
-  gap: 4px;
-  font-size: 11px;
-}
-
-.stats .add {
-  color: var(--added);
-}
-
-.stats .del {
-  color: var(--removed);
-}
-
-.stats .mod {
-  color: var(--modified);
-}
-
 .schema {
   color: var(--muted);
 }
@@ -549,13 +560,95 @@ tr.modified .mark,
   white-space: nowrap;
 }
 
-.item.reviewed {
-  opacity: 0.55;
+/* color = the status of a table / type (like depshape's file rows); the counts say what changed inside it */
+.tinted {
+  border-left: 2px solid transparent;
+  border-radius: 0 6px 6px 0;
 }
 
-.item .check {
+.tinted.added,
+.tinted.added:hover {
+  background: color-mix(in srgb, var(--added-bg) 55%, transparent);
+  border-left-color: var(--added);
+}
+
+.tinted.modified,
+.tinted.modified:hover {
+  background: color-mix(in srgb, var(--modified-bg) 55%, transparent);
+  border-left-color: var(--modified);
+}
+
+.tinted.removed,
+.tinted.removed:hover {
+  background: color-mix(in srgb, var(--removed-bg) 55%, transparent);
+  border-left-color: var(--removed);
+}
+
+.tinted.values,
+.tinted.values:hover {
+  background: color-mix(in srgb, var(--values-bg) 55%, transparent);
+  border-left-color: var(--values);
+}
+
+.tinted.removed .iname {
+  text-decoration: line-through;
+}
+
+.tinted:hover {
+  box-shadow: 0 0 0 1px var(--border) inset;
+}
+
+.tinted.current,
+.tinted.current:hover {
+  background: var(--accent-bg);
+}
+
+/* a table: the row to open it, and the review check next to it */
+.item-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1px;
+}
+
+.item-row .item,
+.item-row .item:hover {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border-radius: 0;
+}
+
+.ireview {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: none;
+  padding: 0 6px;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.item-row:hover .ireview,
+.ireview.on,
+.ireview:focus-visible {
+  opacity: 1;
+}
+
+.ireview:hover {
+  color: var(--accent);
+}
+
+.ireview.on,
+.ireview.on:hover {
   color: var(--added);
+}
+
+/* reviewed (確認済み): faded, with the check left on */
+.item-row.reviewed .iname,
+.item-row.reviewed .ds-change {
+  opacity: 0.45;
 }
 
 .side-foot {
@@ -616,6 +709,26 @@ tr.modified .mark,
   background: var(--bg-soft);
   border-radius: 8px 8px 0 0;
   flex-wrap: wrap;
+}
+
+/* the status shows in color (like the list rows): a tint and a bar on the left */
+.card.added .card-head {
+  background: color-mix(in srgb, var(--added-bg) 55%, var(--bg-soft));
+  box-shadow: inset 3px 0 0 var(--added);
+}
+
+.card.modified .card-head {
+  background: color-mix(in srgb, var(--modified-bg) 55%, var(--bg-soft));
+  box-shadow: inset 3px 0 0 var(--modified);
+}
+
+.card.removed .card-head {
+  background: color-mix(in srgb, var(--removed-bg) 55%, var(--bg-soft));
+  box-shadow: inset 3px 0 0 var(--removed);
+}
+
+.card.removed .tname {
+  text-decoration: line-through;
 }
 
 .card.reviewed .card-head {
@@ -897,6 +1010,14 @@ tr.plain td,
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 6px;
+}
+
+.value-head.tinted {
+  padding: 3px 8px;
+}
+
+.tinted.removed .vname {
+  text-decoration: line-through;
 }
 
 .value-head .tag {

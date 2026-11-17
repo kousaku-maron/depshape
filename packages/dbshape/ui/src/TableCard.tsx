@@ -1,8 +1,9 @@
+import { ChangeCounts } from "@diffshape/ui";
 import { useState } from "react";
 import type { ColumnChange, ColumnView, ConstraintChange, ConstraintView, IndexChange, IndexView, TableChange } from "../../src/model";
 import { tableTarget, type CommentTarget } from "./comments";
 import { CommentButton, CommentThread } from "./CommentViews";
-import { columnBadges, columnParts, indexBody, sideConstraints, STATUS_LABEL, tableStats, valueChips, type ColumnBadges } from "./view";
+import { changeTitle, columnBadges, columnParts, indexBody, sideConstraints, tableStats, valueChips, type ColumnBadges } from "./view";
 
 interface Props {
   table: TableChange;
@@ -31,20 +32,11 @@ export function TableCard({ table: t, reviewed, onReviewed, known, onJump, highl
             {isOpen ? "▾" : "▸"}
           </button>
         )}
-        <span className={`badge ${t.status}`}>{STATUS_LABEL[t.status]}</span>
         <span className="tname">
           <span className="schema">{t.schema}.</span>
           {t.table}
         </span>
-        {t.status === "modified" ? (
-          <span className="stats">
-            {stats.added > 0 && <span className="add">+{stats.added}</span>}
-            {stats.removed > 0 && <span className="del">−{stats.removed}</span>}
-            {stats.modified > 0 && <span className="mod">~{stats.modified}</span>}
-          </span>
-        ) : (
-          <span className="stats muted">{t.columns.length} カラム</span>
-        )}
+        <ChangeCounts stats={stats} title={changeTitle(stats)} />
         <span className="file" title={t.file}>
           {t.file}
         </span>

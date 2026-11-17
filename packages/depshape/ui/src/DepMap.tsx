@@ -2,10 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { CommentSidebar, type Draft } from "./CommentViews";
 import { commentState, itemKey, parseKey, type ReviewComment } from "./comments";
 import { DepPanel } from "./DepPanel";
-import { AreaDivider, CommentCount, CommentIcon, PinIcon, useWidth } from "@diffshape/ui";
+import { AreaDivider, ChangeCounts, CheckIcon, CommentCount, CommentIcon, PinIcon, StatusCounts, useWidth, type ChangeStats } from "@diffshape/ui";
 import { unhide } from "./hide";
 import { clampLayout, DEFAULT_SIDE, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { parentDir, type Model, type TreeDir } from "./model";
+import { folderReviewed } from "./reviewed";
+import { DEP_TITLE } from "./depTitle";
 import { buildAllView, buildChangesView, pathOf, type MapMode, type View, type ViewNode } from "./view";
 
 /*
@@ -33,7 +35,11 @@ export interface DepMapProps {
   onClearPins: () => void;
   /** pin several items at once (used to show a comment's dependencies) */
   onPin: (ids: string[]) => void;
-  includeExternal: boolean;
+  /** files whose dependencies changed (the ones that can be marked reviewed) → hash of the change */
+  reviewTargets: Map<string, string>;
+  /** files marked reviewed whose mark still matches */
+  reviewed: Set<string>;
+  onReviewed: (path: string, on: boolean) => void;
   comments: ReviewComment[];
   onCommentsChange: (next: ReviewComment[]) => void;
   /** the comment sidebar (opened from the header, or automatically when something is selected) */
@@ -43,16 +49,11 @@ export interface DepMapProps {
   active: boolean;
 }
 
-interface Mark {
-  added: number;
-  removed: number;
-}
-
 const isAdditive = (e: MouseEvent) => e.metaKey || e.ctrlKey || e.shiftKey;
 
 /** Added / removed imports per visible row (folders and rest rows sum up the files they stand for). */
-function depMarks(model: Model, view: View): Map<string, Mark> {
-  const marks = new Map<string, Mark>();
+function depMarks(model: Model, view: View): Map<string, ChangeStats> {
+  const marks = new Map<string, ChangeStats>();
   for (const e of model.graph.edges) {
     if (e.external || e.status === "unchanged") continue;
     const rep = view.fileRep.get(e.from);
@@ -62,15 +63,6 @@ function depMarks(model: Model, view: View): Map<string, Mark> {
     m[e.status]++;
   }
   return marks;
-}
-
-function badges(d: TreeDir): { cls: string; text: string }[] {
-  const s = d.stats;
-  const out: { cls: string; text: string }[] = [];
-  if (s.added) out.push({ cls: "added", text: `+${s.added}` });
-  if (s.modified) out.push({ cls: "modified", text: `~${s.modified}` });
-  if (s.removed) out.push({ cls: "removed", text: `−${s.removed}` });
-  return out;
 }
 
 const stop = (fn: () => void) => (e: MouseEvent) => {
@@ -308,12 +300,16 @@ export function DepMap(props: DepMapProps) {
     const own = commentCounts.get(itemKey(n.id)) ?? 0;
     const folded = n.kind === "dir" || (n.kind === "open" && n.collapsed);
     const comments = own || (folded ? innerComments(n.path) : 0);
+    const canReview = n.kind === "file" && props.reviewTargets.has(n.path);
+    const isReviewed =
+      n.kind === "file" ? props.reviewed.has(n.path) : n.kind === "dir" || n.kind === "open" ? folderReviewed(n.path, props.reviewTargets, props.reviewed) : false;
     const cls = [
       "trow",
       n.kind,
       n.status,
       n.file?.isTest ? "test" : "",
       isPinned ? "pinned" : "",
+      isReviewed ? "reviewed" : "",
       hovered === n.id ? "hovered" : "",
       selected.has(itemKey(n.id)) ? "picked" : "",
       litKeys?.has(itemKey(n.id)) ? "lit" : "",
@@ -334,25 +330,27 @@ export function DepMap(props: DepMapProps) {
       >
         <span className="ticon">{icon}</span>
         <span className="tlabel">{text}</span>
-        {n.kind === "file" && n.status !== "unchanged" && <span className={`tdot ${n.status}`}>●</span>}
-        {n.dir &&
-          badges(n.dir).map((b) => (
-            <span key={b.cls} className={`tbadge ${b.cls}`}>
-              {b.text}
-            </span>
-          ))}
+        {n.dir && <StatusCounts stats={n.dir.stats} unit="ファイル" />}
         <span className="tspacer" />
-        {m && m.added > 0 && (
-          <span className="tmark added" title="今回増えた import">
-            +{m.added} 依存
-          </span>
-        )}
-        {m && m.removed > 0 && (
-          <span className="tmark removed" title="今回なくなった import">
-            −{m.removed} 依存
-          </span>
-        )}
+        {m && <ChangeCounts stats={m} title={DEP_TITLE(m)} />}
         {comments > 0 && <CommentCount n={comments} title={own ? "この行へのコメント" : "この中のファイルへのコメント（未対応）"} />}
+        {canReview ? (
+          <button
+            className={`tbtn treview${isReviewed ? " on" : ""}`}
+            onClick={stop(() => props.onReviewed(n.path, !isReviewed))}
+            title={isReviewed ? "確認済み（クリックで外す）" : "確認済みにする（このファイルの依存がまた変わると外れます）"}
+            aria-label={isReviewed ? "確認済みを外す" : "確認済みにする"}
+            aria-pressed={isReviewed}
+          >
+            <CheckIcon size={13} />
+          </button>
+        ) : isReviewed ? (
+          <span className="tcheck" title="中の依存が変わったファイルをすべて確認済み">
+            <CheckIcon size={13} />
+          </span>
+        ) : (
+          <span className="tbtn-space" />
+        )}
         <button
           className="tbtn"
           onClick={stop(() => {
@@ -451,7 +449,6 @@ export function DepMap(props: DepMapProps) {
           hovered={hovered && !pinned.has(hovered) ? hovered : null}
           onTogglePin={props.onTogglePin}
           onClearPins={props.onClearPins}
-          includeExternal={props.includeExternal}
           selection={selected}
           litKeys={litKeys}
           commentCounts={commentCounts}

@@ -4,6 +4,7 @@ import { EyeIcon, PinIcon } from "@diffshape/ui";
 import type { Model, TreeDir } from "./model";
 import { fitPath as fitPathWith } from "./labels";
 import { hideKey, isHidden, unhide, type Column } from "./hide";
+import { loadPref, savePref } from "./prefs";
 import { buildPanel, type PanelLink, type PanelSource, type PanelTarget } from "./panel";
 
 const CHAR_W = 7.3; // monospace 12px
@@ -87,7 +88,6 @@ export interface DepPanelProps {
   hovered: string | null;
   onTogglePin: (id: string) => void;
   onClearPins: () => void;
-  includeExternal: boolean;
   /** comment-target keys currently selected (links are L:<from>><to>) */
   selection: Set<string>;
   /** targets of the comment card under the mouse */
@@ -112,7 +112,9 @@ export interface DepPanelProps {
 const additive = (e: MouseEvent) => e.metaKey || e.ctrlKey || e.shiftKey;
 
 export function DepPanel(props: DepPanelProps) {
-  const { model, tree, pins, hovered, includeExternal, targetOpen, sourceOpen } = props;
+  const { model, tree, pins, hovered, targetOpen, sourceOpen } = props;
+  // a drawing option of this panel only: the counts in the header and the tree never include external packages
+  const [includeExternal, setIncludeExternal] = useState(() => loadPref<string>("external", "0") === "1");
   const data = useMemo(
     () => buildPanel(model, tree, pins, hovered, includeExternal, targetOpen, sourceOpen),
     [model, tree, pins, hovered, includeExternal, targetOpen, sourceOpen],
@@ -412,6 +414,17 @@ export function DepPanel(props: DepPanelProps) {
           {hovered ? `${pins.length ? " ＋ " : ""}ホバー中 1` : ""}
         </span>
         <span className="tspacer" />
+        <label className="ds-check" title="依存先の列に、npm パッケージや Go の標準・外部パッケージも描きます（上の差分の数には含みません）">
+          <input
+            type="checkbox"
+            checked={includeExternal}
+            onChange={(e) => {
+              setIncludeExternal(e.target.checked);
+              savePref("external", e.target.checked ? "1" : "0");
+            }}
+          />
+          外部パッケージも表示
+        </label>
         <button className="ds-btn" onClick={props.onClearPins} disabled={pins.length === 0}>
           ピンをすべて外す
         </button>

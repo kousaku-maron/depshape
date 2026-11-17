@@ -1,29 +1,16 @@
-import { CommentIcon, loadCommentList, loadJSON, saveCommentList, saveJSON, useStoredSet, type ModuleViewProps } from "@diffshape/ui";
+import { ChangeCounts, CommentIcon, loadCommentList, loadJSON, saveCommentList, saveJSON, useStoredSet, StatusCounts, type ModuleViewProps } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { DiffGraph, FileNode } from "../../src/types";
+import type { DiffGraph, Edge, FileNode } from "../../src/types";
 import { commentState, formatPrompt, type ReviewComment } from "./comments";
 import { DepMap } from "./DepMap";
-import { ancestorsOf, buildModel, buildTree, outgoing, type Model } from "./model";
+import { ancestorsOf, buildModel, buildTree } from "./model";
+import { loadPref, savePref } from "./prefs";
+import { loadReviewed, reviewedFiles, reviewScope, reviewTargets, saveReviewed } from "./reviewed";
+import { DEP_TITLE } from "./depTitle";
 import type { MapMode } from "./view";
-
-function loadPref<T extends string>(key: string, fallback: T): T {
-  try {
-    return (localStorage.getItem(`depshape.${key}`) as T | null) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-function savePref(key: string, value: string) {
-  try {
-    localStorage.setItem(`depshape.${key}`, value);
-  } catch {
-    /* ignore */
-  }
-}
 
 export function DepView({ data: graph, active, onComments }: ModuleViewProps<DiffGraph>) {
   const repo = graph.repoRoot;
-  const [includeExternal, setIncludeExternal] = useState(loadPref<string>("external", "0") === "1");
   // what is open / revealed / folded / pinned is kept per repository
   const [expanded, setExpanded] = useStoredSet(`depshape.expanded:${repo}`);
   const [revealed, setRevealed] = useStoredSet(`depshape.revealed:${repo}`);
@@ -40,6 +27,27 @@ export function DepView({ data: graph, active, onComments }: ModuleViewProps<Dif
 
   const model = useMemo(() => buildModel(graph), [graph]);
   const tree = useMemo(() => buildTree(model), [model]);
+
+  // files marked reviewed (per repository and comparison); a mark falls off when the file's dependencies change again
+  const scope = reviewScope(graph);
+  const [marks, setMarks] = useState<Record<string, string>>(() => loadReviewed(scope));
+  useEffect(() => setMarks(loadReviewed(scope)), [scope]);
+  const targets = useMemo(() => reviewTargets(graph.edges), [graph]);
+  const reviewed = useMemo(() => reviewedFiles(targets, marks), [targets, marks]);
+  const setReviewed = useCallback(
+    (path: string, on: boolean) => {
+      const hash = targets.get(path);
+      if (!hash) return;
+      setMarks((prev) => {
+        const next = { ...prev };
+        if (on) next[path] = hash;
+        else delete next[path];
+        saveReviewed(scope, next);
+        return next;
+      });
+    },
+    [targets, scope],
+  );
 
   const updateComments = useCallback(
     (next: ReviewComment[]) => {
@@ -88,36 +96,34 @@ export function DepView({ data: graph, active, onComments }: ModuleViewProps<Dif
 
   const counts = countFiles(model.graph.files);
   const openCount = comments.filter((c) => commentState(model, tree.byPath, c) !== "resolved").length;
-  const edgeCounts = countEdges(model);
+  const depCounts = countDeps(model.graph.edges);
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="summary">
-          <span className="pill added">+{counts.added} ファイル</span>
-          <span className="pill modified">~{counts.modified}</span>
-          <span className="pill removed">−{counts.removed}</span>
+          <span className="slabel">ファイル</span>
+          <StatusCounts stats={counts} unit="ファイル" showZero />
           <span className="sep" />
-          <span className="pill added">+{edgeCounts.added} 依存</span>
-          <span className="pill removed">−{edgeCounts.removed} 依存</span>
+          <span className="slabel">依存</span>
+          <ChangeCounts stats={depCounts} title={DEP_TITLE(depCounts)} showZero />
         </div>
         <div className="controls">
+          {targets.size > 0 && (
+            <span className="ds-progress" title="確認済みにした、依存が変わったファイル（依存がまた変わると外れます）">
+              <span>
+                確認済み {reviewed.size} / {targets.size}
+              </span>
+              <span className="ds-progress-bar">
+                <span style={{ width: `${(reviewed.size / targets.size) * 100}%` }} />
+              </span>
+            </span>
+          )}
           <button className={`ds-btn${sidebarOpen ? " on" : ""}`} onClick={() => setSidebarOpen(!sidebarOpen)} title="コメントのサイドバーを開閉">
             <CommentIcon size={13} />
             コメント {comments.length}
             {comments.length > 0 && <span className="muted">（未対応 {openCount}）</span>}
           </button>
-          <label className="ds-check">
-            <input
-              type="checkbox"
-              checked={includeExternal}
-              onChange={(e) => {
-                setIncludeExternal(e.target.checked);
-                savePref("external", e.target.checked ? "1" : "0");
-              }}
-            />
-            外部パッケージも表示
-          </label>
         </div>
       </header>
       <main>
@@ -145,7 +151,9 @@ export function DepView({ data: graph, active, onComments }: ModuleViewProps<Dif
           onTogglePin={togglePin}
           onClearPins={() => setPins([])}
           onPin={pinMany}
-          includeExternal={includeExternal}
+          reviewTargets={targets}
+          reviewed={reviewed}
+          onReviewed={setReviewed}
           comments={comments}
           onCommentsChange={updateComments}
           sidebarOpen={sidebarOpen}
@@ -165,11 +173,9 @@ function countFiles(files: FileNode[]) {
   return c;
 }
 
-function countEdges(model: Model) {
-  // folder-level edges that appeared / disappeared, local only
+/** Imports that appeared / disappeared, counted like the tree rows (one per importing file and imported package), local only */
+function countDeps(edges: Edge[]) {
   const c = { added: 0, removed: 0 };
-  for (const dir of model.changedDirs) {
-    for (const fe of outgoing(model, dir, false)) if (fe.status !== "unchanged") c[fe.status]++;
-  }
+  for (const e of edges) if (!e.external && e.status !== "unchanged") c[e.status]++;
   return c;
 }

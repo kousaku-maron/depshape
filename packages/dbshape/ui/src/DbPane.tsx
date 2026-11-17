@@ -1,4 +1,4 @@
-import { AreaDivider, CheckIcon, CommentCount, CommentIcon, useWidth, type CommentReport } from "@diffshape/ui";
+import { AreaDivider, ChangeCounts, CheckIcon, CommentCount, CommentIcon, StatusCounts, useWidth, type CommentReport } from "@diffshape/ui";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { schemaFromText } from "../../src/names";
 import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
@@ -9,7 +9,7 @@ import { ErDiagram, type ErDiagramHandle } from "./ErDiagram";
 import type { Mode } from "./erLayout";
 import { clampLayout, DEFAULT_LAYOUT, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { loadReviewed, saveReviewed } from "./reviewed";
-import { hashOf, matchesFilter, tableStats, valueChips, valueTarget, type Status } from "./view";
+import { changeTitle, hashOf, matchesFilter, tableStats, valueChips, valueTarget, type Status } from "./view";
 
 /** Reviewed marks are kept per repository and comparison */
 const scopeOf = (d: DbShapeResult) => `${d.repoRoot}|${d.base.label}|${d.target.label}|${d.database.id}`;
@@ -160,10 +160,21 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
         <header className="top">
           {switcher}
           <span className="counts">
-            <span className="badge added">新規 {tables.filter((t) => t.status === "added").length}</span>
-            <span className="badge modified">変更 {tables.filter((t) => t.status === "modified").length}</span>
-            <span className="badge removed">削除 {tables.filter((t) => t.status === "removed").length}</span>
-            <span className="badge values">値 {d.values.length}</span>
+            <span className="slabel">テーブル</span>
+            <StatusCounts
+              stats={{
+                added: tables.filter((t) => t.status === "added").length,
+                modified: tables.filter((t) => t.status === "modified").length,
+                removed: tables.filter((t) => t.status === "removed").length,
+              }}
+              unit="テーブル"
+              showZero
+            />
+            <span className="sep" />
+            <span className="slabel">値の変化</span>
+            <span className={`vcount${d.values.length ? "" : " zero"}`} title="CHECK や ENUM などの値の変化">
+              {d.values.length}
+            </span>
           </span>
           <span className="spacer" />
           {tables.length > 0 && (
@@ -191,23 +202,27 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
                   {items.map((t) => {
                     const s = tableStats(t);
                     const n = commentMarks.tables.get(t.name) ?? 0;
+                    const rev = isReviewed(t);
                     return (
-                      <button key={t.name} className={`item ${isReviewed(t) ? "reviewed" : ""} ${sel?.name === t.name ? "current" : ""}`} onClick={() => selectTable(t.name)} title={t.name}>
-                        <span className={`mark ${t.status}`}>{t.status === "added" ? "+" : t.status === "removed" ? "−" : "~"}</span>
-                        <span className="iname">
-                          <span className="schema">{t.schema}.</span>
-                          {t.table}
-                        </span>
-                        {t.status === "modified" && (
-                          <span className="stats">
-                            {s.added > 0 && <span className="add">+{s.added}</span>}
-                            {s.removed > 0 && <span className="del">−{s.removed}</span>}
-                            {s.modified > 0 && <span className="mod">~{s.modified}</span>}
+                      <div key={t.name} className={`item-row tinted ${t.status}${rev ? " reviewed" : ""}${sel?.name === t.name ? " current" : ""}`}>
+                        <button className="item" onClick={() => selectTable(t.name)} title={t.name}>
+                          <span className="iname">
+                            <span className="schema">{t.schema}.</span>
+                            {t.table}
                           </span>
-                        )}
-                        {n > 0 && <CommentCount n={n} title="このテーブルへの未対応のコメント" />}
-                        {isReviewed(t) && <CheckIcon size={12} className="check" />}
-                      </button>
+                          <ChangeCounts stats={s} title={changeTitle(s)} />
+                          {n > 0 && <CommentCount n={n} title="このテーブルへの未対応のコメント" />}
+                        </button>
+                        <button
+                          className={`ireview${rev ? " on" : ""}`}
+                          onClick={() => setTableReviewed(t, !rev)}
+                          title={rev ? "確認済み（クリックで外す）" : "確認済みにする（テーブルがまた変わると外れます）"}
+                          aria-label={rev ? "確認済みを外す" : "確認済みにする"}
+                          aria-pressed={rev}
+                        >
+                          <CheckIcon size={12} />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -220,8 +235,7 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
               {d.values.map((v, i) => {
                 const target = valueTarget(v);
                 return (
-                  <button key={i} className="item" onClick={() => (target.table ? selectTable(target.table) : v.type && setSelection({ kind: "type", name: v.type }))}>
-                    <span className="mark values">±</span>
+                  <button key={i} className="item tinted values" onClick={() => (target.table ? selectTable(target.table) : v.type && setSelection({ kind: "type", name: v.type }))}>
                     <span className="iname">{target.label}</span>
                   </button>
                 );
@@ -274,8 +288,7 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
                   型 <span className="muted">{types.length}</span>
                 </div>
                 {types.map((t) => (
-                  <button key={t.change.name} className={`item ${sel?.name === t.change.name ? "current" : ""}`} onClick={() => setSelection({ kind: "type", name: t.change.name })}>
-                    <span className={`mark ${t.change.status}`}>{t.change.status === "added" ? "+" : t.change.status === "removed" ? "−" : "~"}</span>
+                  <button key={t.change.name} className={`item tinted ${t.change.status}${sel?.name === t.change.name ? " current" : ""}`} onClick={() => setSelection({ kind: "type", name: t.change.name })}>
                     <span className="iname">{t.change.name}</span>
                   </button>
                 ))}

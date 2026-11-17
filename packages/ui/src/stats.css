@@ -1,0 +1,50 @@
+/* Counts shared by the modules (Stats.tsx): color = status of a thing, + / − / ~ = what changed inside it. */
+
+.ds-status {
+  display: inline-flex;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.ds-status-n {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.ds-status-dot {
+  font-size: 8px;
+}
+
+.ds-change {
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  font-style: normal;
+  line-height: 16px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.ds-status-n.added,
+.ds-change .added {
+  color: var(--added);
+}
+.ds-status-n.modified,
+.ds-change .modified {
+  color: var(--modified);
+}
+.ds-status-n.removed,
+.ds-change .removed {
+  color: var(--removed);
+}
+.ds-status-n.zero,
+.ds-change .zero {
+  color: var(--muted);
+  font-weight: 400;
+}
