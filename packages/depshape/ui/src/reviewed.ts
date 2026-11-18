@@ -1,10 +1,11 @@
 import { hashOf, loadJSON, saveJSON } from "@diffshape/ui";
-import type { DiffGraph, Edge } from "../../src/types";
+import type { DiffGraph, Edge, FileNode } from "../../src/types";
 
 /*
- * Files marked "確認済み" (reviewed), like dbshape's tables. Only files whose dependencies changed
- * (the rows with + / −) can be marked. Each mark keeps a hash of that file's added / removed imports,
- * so a file whose dependencies change again after it was marked shows up as not reviewed.
+ * Files marked "確認済み" (reviewed), like dbshape's tables and fileshape's files. Every changed file
+ * can be marked, and so can a file whose imports changed without the file being edited (an import that
+ * now resolves to another folder). Each mark keeps a hash of that file's added / removed imports, so a
+ * file whose dependencies change again after it was marked shows up as not reviewed.
  */
 
 const PREFIX = "depshape.reviewed:";
@@ -16,9 +17,10 @@ export const loadReviewed = (scope: string) => loadJSON<Record<string, string>>(
 
 export const saveReviewed = (scope: string, marks: Record<string, string>) => saveJSON(PREFIX + scope, marks);
 
-/** Each file whose local imports appeared / disappeared → a hash of those changes */
-export function reviewTargets(edges: Edge[]): Map<string, string> {
+/** Each changed file, and each file whose local imports appeared / disappeared → a hash of those changes */
+export function reviewTargets(files: FileNode[], edges: Edge[]): Map<string, string> {
   const changes = new Map<string, string[]>();
+  for (const f of files) if (f.status !== "unchanged") changes.set(f.path, []);
   for (const e of edges) {
     if (e.external || e.status === "unchanged") continue;
     let list = changes.get(e.from);

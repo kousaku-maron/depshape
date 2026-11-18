@@ -1,5 +1,5 @@
 import { BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CommentIcon, loadCommentList, loadJSON, ModuleBar, ReviewProgress, saveCommentList, saveJSON, useStoredSet, StatusCounts, type ModuleViewProps } from "@diffshape/ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiffGraph, Edge, FileNode } from "../../src/types";
 import { commentState, formatPrompt, type ReviewComment } from "./comments";
 import { DepMap } from "./DepMap";
@@ -11,9 +11,8 @@ import type { MapMode } from "./view";
 
 export function DepView({ data: graph, active, onComments, modules, openIn }: ModuleViewProps<DiffGraph>) {
   const repo = graph.repoRoot;
-  // what is open / revealed / folded / pinned is kept per repository
+  // what is open / folded / pinned is kept per repository
   const [expanded, setExpanded] = useStoredSet(`depshape.expanded:${repo}`);
-  const [revealed, setRevealed] = useStoredSet(`depshape.revealed:${repo}`);
   const [collapsed, setCollapsed] = useStoredSet(`depshape.collapsed:${repo}`);
   const pinKey = `depshape.pins:${repo}`;
   const [pins, setPins] = useState<string[]>(() => stringList(loadJSON<unknown>(pinKey, [])));
@@ -32,7 +31,7 @@ export function DepView({ data: graph, active, onComments, modules, openIn }: Mo
   const scope = reviewScope(graph);
   const [marks, setMarks] = useState<Record<string, string>>(() => loadReviewed(scope));
   useEffect(() => setMarks(loadReviewed(scope)), [scope]);
-  const targets = useMemo(() => reviewTargets(graph.edges), [graph]);
+  const targets = useMemo(() => reviewTargets(graph.files, graph.edges), [graph]);
   const reviewed = useMemo(() => reviewedFiles(targets, marks), [targets, marks]);
   const setReviewed = useCallback(
     (path: string, on: boolean) => {
@@ -76,22 +75,19 @@ export function DepView({ data: graph, active, onComments, modules, openIn }: Mo
   const pinMany = useCallback((ids: string[]) => setPins((prev) => [...prev, ...ids.filter((id) => !prev.includes(id))]), []);
   const togglePin = useCallback((id: string) => setPins((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id])), []);
 
+  // the whole tree: open / close a folder (closing a box also closes everything inside it)
   const toggleDir = useCallback(
-    (dir: string) => {
-      const flip = (prev: Set<string>) => {
+    (dir: string) =>
+      setExpanded((prev) => {
         const next = new Set(prev);
         if (next.has(dir)) {
-          // closing a box also closes everything inside it
           for (const d of [...next]) if (d === dir || d.startsWith(dir + "/")) next.delete(d);
         } else {
           next.add(dir);
         }
         return next;
-      };
-      if (mapMode === "all") setExpanded(flip);
-      else setRevealed(flip);
-    },
-    [mapMode, setExpanded, setRevealed],
+      }),
+    [setExpanded],
   );
 
   // every file opens in the file module (when that module is in this run): a changed one at its line
@@ -106,6 +102,27 @@ export function DepView({ data: graph, active, onComments, modules, openIn }: Mo
     [model, hasFileModule],
   );
   const onOpenFile = useMemo(() => (hasFileModule ? (path: string) => openIn("file", path) : null), [hasFileModule, openIn]);
+
+  // ---- folding, like fileshape's tree. "全体" opens the folders with changes when it is first shown
+  // (and the fold button opens them again); "変更" starts with everything open
+  const changedOpen = useMemo(() => {
+    const out = new Set<string>();
+    for (const d of model.changedDirs) {
+      out.add(d);
+      for (const a of ancestorsOf(d)) out.add(a);
+    }
+    return out;
+  }, [model]);
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (mapMode !== "all" || seeded.current) return;
+    seeded.current = true;
+    if (expanded.size === 0) setExpanded(new Set(changedOpen));
+  }, [mapMode, expanded, changedOpen, setExpanded]);
+  const fold = (close: boolean, shown: string[]) => {
+    if (mapMode === "all") setExpanded(close ? new Set() : new Set(changedOpen));
+    else setCollapsed(close ? new Set(shown) : new Set());
+  };
 
   const counts = countFiles(model.graph.files);
   const openCount = comments.filter((c) => commentState(model, tree.byPath, c) !== "resolved").length;
@@ -122,7 +139,7 @@ export function DepView({ data: graph, active, onComments, modules, openIn }: Mo
           <ChangeCounts stats={depCounts} title={DEP_TITLE(depCounts)} showZero />
         </BarCounts>
         <BarSpacer />
-        <ReviewProgress done={reviewed.size} total={targets.size} title="確認済みにした、依存が変わったファイル（依存がまた変わると外れます）" />
+        <ReviewProgress done={reviewed.size} total={targets.size} title="確認済みにした、変更したファイル（そのファイルの依存がまた変わると外れます）" />
         <button className={`ds-btn${sidebarOpen ? " on" : ""}`} onClick={() => setSidebarOpen(!sidebarOpen)} title="コメントのサイドバーを開閉">
             <CommentIcon size={13} />
             コメント {comments.length}
@@ -139,17 +156,11 @@ export function DepView({ data: graph, active, onComments, modules, openIn }: Mo
             setMapMode(m);
             savePref("mapMode", m);
           }}
-          open={mapMode === "all" ? expanded : revealed}
+          open={expanded}
           onToggle={toggleDir}
           collapsed={collapsed}
           onCollapseToggle={toggleCollapsed}
-          onExpandAll={() => setCollapsed(new Set())}
-          onExpandChanged={() => {
-            const next = new Set(expanded);
-            for (const d of model.changedDirs) for (const a of ancestorsOf(d)) next.add(a);
-            setExpanded(next);
-          }}
-          onCollapseAll={() => (mapMode === "all" ? setExpanded(new Set()) : setRevealed(new Set()))}
+          onFold={fold}
           pins={pins}
           onTogglePin={togglePin}
           onClearPins={() => setPins([])}

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { CommentSidebar, type Draft } from "./CommentViews";
 import { commentState, itemKey, parseKey, type ReviewComment } from "./comments";
 import { DepPanel } from "./DepPanel";
-import { AreaDivider, ChangeCounts, CheckIcon, CommentCount, CommentIcon, FileIcon, PinIcon, StatusCounts, useWidth, type ChangeStats } from "@diffshape/ui";
+import { AreaDivider, ChangeCounts, ChevronIcon, CommentCount, CommentIcon, FileIcon, PinIcon, StatusMark, useWidth, type ChangeStats } from "@diffshape/ui";
 import { unhide } from "./hide";
 import { clampLayout, DEFAULT_SIDE, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { parentDir, type Model, type TreeDir } from "./model";
@@ -21,21 +21,23 @@ export interface DepMapProps {
   tree: Map<string, TreeDir>;
   mode: MapMode;
   onModeChange: (m: MapMode) => void;
-  /** "all" mode: open folders. "changes" mode: folders revealed in full. */
+  /** "all" mode: open folders */
   open: Set<string>;
   onToggle: (dir: string) => void;
   /** "changes" mode: folders folded away by the user */
   collapsed: Set<string>;
   onCollapseToggle: (dir: string) => void;
-  onExpandAll: () => void;
-  onExpandChanged: () => void;
-  onCollapseAll: () => void;
+  /**
+   * The fold button. `close`: close every folder (`shown` = the open folders on screen); otherwise open
+   * them again ("全体": the folders with changes, "変更": everything)
+   */
+  onFold: (close: boolean, shown: string[]) => void;
   pins: string[];
   onTogglePin: (id: string) => void;
   onClearPins: () => void;
   /** pin several items at once (used to show a comment's dependencies) */
   onPin: (ids: string[]) => void;
-  /** files whose dependencies changed (the ones that can be marked reviewed) → hash of the change */
+  /** changed files and files whose dependencies changed (the ones that can be marked reviewed) → hash of their dependency changes */
   reviewTargets: Map<string, string>;
   /** files marked reviewed whose mark still matches */
   reviewed: Set<string>;
@@ -80,6 +82,7 @@ export function DepMap(props: DepMapProps) {
   const [hovered, setHovered] = useState<string | null>(null);
   const clearTimer = useRef<number | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const treeColRef = useRef<HTMLElement>(null);
   // area widths: dragged on the dividers, saved for next time
   const bodyRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<Layout>(loadLayout);
@@ -89,11 +92,30 @@ export function DepMap(props: DepMapProps) {
   const openKey = useMemo(() => [...open].sort().join("|"), [open]);
   const collapsedKey = useMemo(() => [...props.collapsed].sort().join("|"), [props.collapsed]);
   const view = useMemo(
-    () => (mode === "all" ? buildAllView(root, open) : buildChangesView(model, root, tree, open, props.collapsed)),
+    () => (mode === "all" ? buildAllView(root, open) : buildChangesView(model, root, props.collapsed)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [model, root, tree, mode, openKey, collapsedKey],
   );
   const marks = useMemo(() => depMarks(model, view), [model, view]);
+  // the fold button follows what is on screen: "−" while a folder is open (全体) / none is folded (変更)
+  const folds = useMemo(() => {
+    const shown: string[] = [];
+    let folded = false;
+    const walk = (nodes: ViewNode[]) => {
+      for (const n of nodes) {
+        if (n.kind === "open") {
+          if (n.collapsed) folded = true;
+          else {
+            shown.push(n.path);
+            walk(n.children);
+          }
+        }
+      }
+    };
+    walk(view.roots);
+    return { shown, folded };
+  }, [view]);
+  const foldOpen = mode === "all" ? folds.shown.length > 0 : !folds.folded;
   const pinned = useMemo(() => new Set(pins), [pins]);
   // rows of the panel's target tree the user opened or folded
   const [targetOpen, setTargetOpen] = useState<ReadonlyMap<string, boolean>>(() => new Map());
@@ -274,33 +296,35 @@ export function DepMap(props: DepMapProps) {
     const sc = scrollRef.current;
     const el = rowEl(n.id);
     if (sc && el) anchor.current = { id: n.id, top: offsetIn(el, sc) };
-    // in the changes view a folder header folds / unfolds the folder; one opened only by revealing it closes instead
-    if (mode === "changes" && n.kind === "open" && !n.revealedOnly) props.onCollapseToggle(n.path);
+    // the changes view folds / unfolds a folder in place; the whole tree opens / closes it
+    if (mode === "changes") props.onCollapseToggle(n.path);
     else props.onToggle(n.path);
   };
 
   const abs = (p: string) => (p ? `${model.graph.repoRoot}/${p}` : model.graph.repoRoot);
 
+  /** A folder's changed files, now that its row shows one status letter instead of the counts */
+  const changedText = (n: ViewNode) => {
+    const s = n.dir!.stats;
+    const parts = ([["added", "追加"], ["modified", "変更"], ["removed", "削除"]] as const).filter(([k]) => s[k] > 0).map(([k, l]) => `${l} ${s[k]}`);
+    return parts.length ? `（${parts.join("・")}）` : "";
+  };
+  const reviewedText = (n: ViewNode) => (folderReviewed(n.path, props.reviewTargets, props.reviewed) ? "\n中の変更したファイルはすべて確認済み" : "");
   const rowTitle = (n: ViewNode): string => {
     switch (n.kind) {
       case "file":
         return `${abs(n.path)}\n${n.file!.linesAfter ?? n.file!.linesBefore} 行`;
       case "dir":
-        return `${abs(n.path)}\n${n.dir!.stats.total} ファイル（クリックで開く）`;
+        return `${abs(n.path)}\n${n.dir!.stats.total} ファイル${changedText(n)}（クリックで開く）${reviewedText(n)}`;
       case "open":
-        return `${abs(n.path)}\n${n.dir!.stats.total} ファイル（${n.collapsed ? "クリックで開く" : "クリックで閉じる"}）`;
-      case "rest": {
-        const list = [...(n.hiddenDirs ?? []).map((d) => d.name + "/"), ...(n.hiddenFiles ?? []).map((f) => f.path.slice(f.path.lastIndexOf("/") + 1))];
-        if (n.full) return `${abs(n.path)} の中で変更のないもの（クリックで閉じる）`;
-        return [`${abs(n.path)} の中で変更のないもの（クリックで開く）`, ...list.slice(0, 12), ...(list.length > 12 ? [`…ほか ${list.length - 12} 件`] : [])].join("\n");
-      }
+        return `${abs(n.path)}\n${n.dir!.stats.total} ファイル${changedText(n)}（${n.collapsed ? "クリックで開く" : "クリックで閉じる"}）${reviewedText(n)}`;
     }
   };
 
   const row = (n: ViewNode) => {
-    const icon = n.kind === "open" ? (n.collapsed ? "▸" : "▾") : n.kind === "rest" ? (n.full ? "▾" : "▸") : n.kind === "dir" ? "▸" : "";
-    const text = n.kind === "file" || n.kind === "rest" ? n.label : `${n.label}/`;
-    const m = (n.kind === "open" && !n.collapsed) || (n.kind === "rest" && n.full) ? undefined : marks.get(n.id);
+    const folderOpen = n.kind === "open" && !n.collapsed;
+    const text = n.kind === "file" ? n.label : `${n.label}/`;
+    const m = n.kind === "open" && !n.collapsed ? undefined : marks.get(n.id);
     const isPinned = pinned.has(n.id);
     const own = commentCounts.get(itemKey(n.id)) ?? 0;
     const folded = n.kind === "dir" || (n.kind === "open" && n.collapsed);
@@ -327,7 +351,7 @@ export function DepMap(props: DepMapProps) {
         className={cls}
         data-id={n.id}
         title={rowTitle(n)}
-        onMouseEnter={() => (n.kind === "rest" ? releaseHover() : hover(n.id))}
+        onMouseEnter={() => hover(n.id)}
         onMouseLeave={releaseHover}
         onClick={(e) => {
           if (isAdditive(e)) selectKeys([itemKey(n.id)], true);
@@ -335,29 +359,38 @@ export function DepMap(props: DepMapProps) {
         }}
         onDoubleClick={openAs ? () => props.onOpenFile?.(n.path) : undefined}
       >
-        <span className="ticon">{icon}</span>
+        {/* like fileshape's tree: a file starts with its 確認済み check box and status letter (blank when
+            unchanged), a folder with its fold and the status of what is inside */}
+        {n.kind === "file" ? (
+          <>
+            {canReview ? (
+              <input
+                type="checkbox"
+                className="tcheckbox"
+                checked={isReviewed}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                onChange={(e) => props.onReviewed(n.path, e.target.checked)}
+                aria-label={`${n.path} を確認済みにする`}
+                title="確認済み（このファイルの依存がまた変わると外れます）"
+              />
+            ) : (
+              <span className="tcheckbox-space" />
+            )}
+            <StatusMark status={n.status} small />
+          </>
+        ) : (
+          <>
+            <span className={`tfold${folderOpen ? " open" : ""}`}>
+              <ChevronIcon size={12} />
+            </span>
+            {n.dir && <StatusMark status={n.status} small title={null} />}
+          </>
+        )}
         <span className="tlabel">{text}</span>
-        {n.dir && <StatusCounts stats={n.dir.stats} unit="ファイル" />}
         <span className="tspacer" />
         {m && <ChangeCounts stats={m} title={DEP_TITLE(m)} />}
         {comments > 0 && <CommentCount n={comments} title={own ? "この行へのコメント" : "この中のファイルへのコメント（未対応）"} />}
-        {canReview ? (
-          <button
-            className={`tbtn treview${isReviewed ? " on" : ""}`}
-            onClick={stop(() => props.onReviewed(n.path, !isReviewed))}
-            title={isReviewed ? "確認済み（クリックで外す）" : "確認済みにする（このファイルの依存がまた変わると外れます）"}
-            aria-label={isReviewed ? "確認済みを外す" : "確認済みにする"}
-            aria-pressed={isReviewed}
-          >
-            <CheckIcon size={13} />
-          </button>
-        ) : isReviewed ? (
-          <span className="tcheck" title="中の依存が変わったファイルをすべて確認済み">
-            <CheckIcon size={13} />
-          </span>
-        ) : (
-          <span className="tbtn-space" />
-        )}
         {fileModule &&
           (openAs ? (
             <button
@@ -383,18 +416,13 @@ export function DepMap(props: DepMapProps) {
         >
           <CommentIcon size={13} />
         </button>
-        {n.kind === "rest" ? (
-          // "ほか N フォルダ・M ファイル" is a fold in the tree, not a thing to compare; pin the folder and open it instead
-          <span className="tbtn-space" />
-        ) : (
-          <button
-            className={`tbtn tpin${isPinned ? " on" : ""}`}
-            onClick={stop(() => props.onTogglePin(n.id))}
-            title={isPinned ? "パネルにピン留め中（クリックでピン留めを外す）" : "パネルにピン留めする（表示し続ける）"}
-          >
-            <PinIcon on={isPinned} />
-          </button>
-        )}
+        <button
+          className={`tbtn tpin${isPinned ? " on" : ""}`}
+          onClick={stop(() => props.onTogglePin(n.id))}
+          title={isPinned ? "パネルにピン留め中（クリックでピン留めを外す）" : "パネルにピン留めする（表示し続ける）"}
+        >
+          <PinIcon on={isPinned} />
+        </button>
       </div>
     );
   };
@@ -406,11 +434,6 @@ export function DepMap(props: DepMapProps) {
           {row(n)}
           {!n.collapsed && <div className="tchildren">{renderNodes(n.children)}</div>}
         </div>
-      ) : n.kind === "rest" && n.full ? (
-        <div key={n.id} className="tgroup rest-group">
-          {row(n)}
-          <div className="tchildren">{renderNodes(n.children)}</div>
-        </div>
       ) : (
         <div key={n.id}>{row(n)}</div>
       ),
@@ -418,46 +441,41 @@ export function DepMap(props: DepMapProps) {
 
   return (
     <div className="map">
-      <div className="map-toolbar">
-        <div className="ds-seg" role="group" aria-label="表示範囲">
-          <button className={mode === "changes" ? "on" : ""} onClick={() => props.onModeChange("changes")} title="変更したファイルと、その依存先だけを表示">
-            変更まわり
-          </button>
-          <button className={mode === "all" ? "on" : ""} onClick={() => props.onModeChange("all")} title="リポジトリ全体のツリーを表示">
-            全体
-          </button>
-        </div>
-        {mode === "all" ? (
-          <>
-            <button className="ds-btn" onClick={props.onExpandChanged}>
-              変更箇所をすべて開く
-            </button>
-            <button className="ds-btn" onClick={props.onCollapseAll}>
-              すべて閉じる
-            </button>
-          </>
-        ) : (
-          <>
-            <button className="ds-btn" onClick={props.onExpandAll} disabled={props.collapsed.size === 0} title="閉じたフォルダをすべて開く">
-              すべて開く
-            </button>
-            <button className="ds-btn" onClick={props.onCollapseAll} disabled={open.size === 0} title="「ほか N ファイル」で開いたものを閉じる">
-              変更まわりだけに戻す
-            </button>
-          </>
-        )}
-      </div>
       <div
         className={`map-body${sidebarOpen ? " with-sidebar" : ""}`}
         ref={bodyRef}
         style={{ gridTemplateColumns: gridColumns(bodyW ? clampLayout(layout, bodyW, sidebarOpen) : layout, sidebarOpen) }}
       >
-        <div className="map-scroll tree" ref={scrollRef} onMouseLeave={releaseHover}>
-          {renderNodes(view.roots)}
-        </div>
+        {/* the tree column, like fileshape's sidebar: the view switch and the fold button on top */}
+        <aside className="tree-col" ref={treeColRef}>
+          <div className="tree-head">
+            <div className="ds-seg tree-mode" role="radiogroup" aria-label="表示範囲">
+              {(
+                [
+                  ["changes", "変更", "変更したファイルだけを表示（依存先は右のパネルに出ます）"],
+                  ["all", "全体", "リポジトリ全体のツリーを表示（最初は変更のあるフォルダだけ開いています）"],
+                ] as const
+              ).map(([m, label, title]) => (
+                <button key={m} role="radio" aria-checked={mode === m} className={mode === m ? "on" : ""} onClick={() => props.onModeChange(m)} title={title}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              className="tree-fold"
+              onClick={() => props.onFold(foldOpen, folds.shown)}
+              title={foldOpen ? "すべてのフォルダを閉じる" : mode === "all" ? "変更のあるフォルダを開く" : "すべてのフォルダを開く"}
+            >
+              {foldOpen ? "−" : "＋"}
+            </button>
+          </div>
+          <div className="map-scroll tree" ref={scrollRef} onMouseLeave={releaseHover}>
+            {renderNodes(view.roots)}
+          </div>
+        </aside>
         <AreaDivider
           title="ドラッグでツリーとパネルの幅を変える（ダブルクリックで元に戻す）"
-          start={() => scrollRef.current?.getBoundingClientRect().width ?? 0}
+          start={() => treeColRef.current?.getBoundingClientRect().width ?? 0}
           onDrag={(w0, dx) => setLayout((l) => clampLayout({ ...l, tree: w0 + dx }, bodyW, sidebarOpen))}
           onEnd={() => setLayout((l) => (saveLayout(l), l))}
           onReset={() => setLayout((l) => (saveLayout({ ...l, tree: undefined }), { ...l, tree: undefined }))}
@@ -519,7 +537,7 @@ export function DepMap(props: DepMapProps) {
       <div className="legend">
         <span className="muted">
           行にホバーすると右のパネルに依存先が出ます ・ ピンのアイコンでピン留めし、複数並べて比べられます ・ 矢印や箱のクリック（⌘ / Shift で複数）・行の吹き出しでコメント（c キーで入力欄へ）・ 「+n
-          依存」= 今回増えた import ・{mode === "changes" ? " 「ほか N ファイル」= 変更のない既存ファイル（クリックで展開）" : " フォルダをクリックで開閉"}
+          依存」= 今回増えた import ・{mode === "changes" ? " 変更していないファイルは「全体」で表示" : " フォルダをクリックで開閉"}
         </span>
       </div>
     </div>

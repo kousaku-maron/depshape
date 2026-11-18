@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { Edge } from "../src/types";
+import { hashOf } from "@diffshape/ui";
+import type { Edge, FileNode } from "../src/types";
 import { folderReviewed, reviewedFiles, reviewTargets } from "../ui/src/reviewed";
 
 const edge = (from: string, to: string, status: Edge["status"], external = false): Edge => ({ from, to, status, external });
+const file = (path: string, status: FileNode["status"]): FileNode => ({ path, dir: path.split("/").slice(0, -1).join("/"), status, linesBefore: 1, linesAfter: 1, isTest: false });
 
 describe("reviewTargets", () => {
   it("lists only files whose local imports appeared or disappeared", () => {
-    const t = reviewTargets([
+    const t = reviewTargets([], [
       edge("a/x.ts", "b", "added"),
       edge("a/y.ts", "b", "unchanged"),
       edge("a/z.ts", "react", "added", true),
@@ -15,31 +17,52 @@ describe("reviewTargets", () => {
     expect([...t.keys()].sort()).toEqual(["a/x.ts", "c/w.ts"]);
   });
 
+  it("lists every changed file too, even one whose imports did not change", () => {
+    const t = reviewTargets(
+      [file("a/x.ts", "modified"), file("a/new.ts", "added"), file("a/old.ts", "removed"), file("a/same.ts", "unchanged")],
+      [edge("a/x.ts", "b", "unchanged"), edge("c/w.ts", "a", "removed")],
+    );
+    expect([...t.keys()].sort()).toEqual(["a/new.ts", "a/old.ts", "a/x.ts", "c/w.ts"]);
+  });
+
+  it("keeps the hash of a file's import changes, so marks made before still match", () => {
+    const t = reviewTargets([file("a/x.ts", "modified")], [edge("a/x.ts", "c", "removed"), edge("a/x.ts", "b", "added")]);
+    expect(t.get("a/x.ts")).toBe(hashOf(["+ b", "- c"]));
+  });
+
+  it("drops the mark of a changed file once its imports start to change", () => {
+    const quiet = reviewTargets([file("a/x.ts", "modified")], []);
+    const marks = Object.fromEntries(quiet);
+    expect([...reviewedFiles(quiet, marks)]).toEqual(["a/x.ts"]);
+    const moved = reviewTargets([file("a/x.ts", "modified")], [edge("a/x.ts", "b", "added")]);
+    expect([...reviewedFiles(moved, marks)]).toEqual([]);
+  });
+
   it("gives the same hash whatever the order of the edges", () => {
-    const one = reviewTargets([edge("a/x.ts", "b", "added"), edge("a/x.ts", "c", "removed")]);
-    const two = reviewTargets([edge("a/x.ts", "c", "removed"), edge("a/x.ts", "b", "added")]);
+    const one = reviewTargets([], [edge("a/x.ts", "b", "added"), edge("a/x.ts", "c", "removed")]);
+    const two = reviewTargets([], [edge("a/x.ts", "c", "removed"), edge("a/x.ts", "b", "added")]);
     expect(one.get("a/x.ts")).toBe(two.get("a/x.ts"));
   });
 
   it("changes the hash when the file's dependency changes differ", () => {
-    const before = reviewTargets([edge("a/x.ts", "b", "added")]);
-    const after = reviewTargets([edge("a/x.ts", "b", "added"), edge("a/x.ts", "c", "added")]);
+    const before = reviewTargets([], [edge("a/x.ts", "b", "added")]);
+    const after = reviewTargets([], [edge("a/x.ts", "b", "added"), edge("a/x.ts", "c", "added")]);
     expect(before.get("a/x.ts")).not.toBe(after.get("a/x.ts"));
   });
 });
 
 describe("reviewedFiles", () => {
   it("keeps a mark only while it matches the current changes", () => {
-    const marked = reviewTargets([edge("a/x.ts", "b", "added"), edge("a/y.ts", "b", "added")]);
+    const marked = reviewTargets([], [edge("a/x.ts", "b", "added"), edge("a/y.ts", "b", "added")]);
     const marks = Object.fromEntries(marked);
     // a/y.ts changed again after it was marked; a/gone.ts no longer has dependency changes
-    const now = reviewTargets([edge("a/x.ts", "b", "added"), edge("a/y.ts", "c", "added")]);
+    const now = reviewTargets([], [edge("a/x.ts", "b", "added"), edge("a/y.ts", "c", "added")]);
     expect([...reviewedFiles(now, { ...marks, "a/gone.ts": "zzz" })]).toEqual(["a/x.ts"]);
   });
 });
 
 describe("folderReviewed", () => {
-  const targets = reviewTargets([edge("a/x.ts", "b", "added"), edge("a/sub/y.ts", "b", "added"), edge("c/z.ts", "a", "added")]);
+  const targets = reviewTargets([], [edge("a/x.ts", "b", "added"), edge("a/sub/y.ts", "b", "added"), edge("c/z.ts", "a", "added")]);
 
   it("is reviewed when every file to review inside it is reviewed", () => {
     expect(folderReviewed("a", targets, new Set(["a/x.ts", "a/sub/y.ts"]))).toBe(true);

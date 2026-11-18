@@ -196,48 +196,6 @@
   padding: 12px;
 }
 
-/* ---- status letter (A / M / D / R) */
-
-.fs-st {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.fs-st.small {
-  width: 15px;
-  height: 15px;
-  font-size: 10px;
-}
-
-.fs-st.added {
-  background: var(--added-bg);
-  color: var(--added);
-}
-
-.fs-st.modified,
-.fs-st.renamed {
-  background: var(--modified-bg);
-  color: var(--modified);
-}
-
-.fs-st.removed {
-  background: var(--removed-bg);
-  color: var(--removed);
-}
-
-/* no change: an empty, outlined box where the letter would be */
-.fs-st.unchanged {
-  border: 1px solid var(--border);
-}
-
 /* ---- buttons in rows */
 
 .fs-fold {

@@ -1,4 +1,4 @@
-import { ChevronIcon, CommentCount } from "@diffshape/ui";
+import { ChevronIcon, CommentCount, StatusMark } from "@diffshape/ui";
 import { useEffect, useMemo, useState } from "react";
 import { changedFolders, filterTree, folderPaths, type TreeNode } from "./model";
 
@@ -23,8 +23,6 @@ interface Props {
   onSelect: (path: string) => void;
   onReviewed: (path: string, on: boolean) => void;
 }
-
-const STATUS_MARK = { added: "A", modified: "M", removed: "D", renamed: "R" } as const;
 
 const flip = (set: Set<string>, path: string) => {
   const next = new Set(set);
@@ -56,7 +54,7 @@ export function FileTree({ mode, onMode, tree, error, current, reviewed, comment
       return (
         <div key={node.path} className={`fs-tree-row file plain${current === node.path ? " current" : ""}${node.file ? " shown" : ""}`} style={pad} onClick={() => onSelect(node.path)} title={`${node.path}（変更なし）`}>
           <span className="fs-tree-check-space" />
-          <span className="fs-st small unchanged" />
+          <StatusMark status="unchanged" small />
           <span className="fs-tree-name">{node.name}</span>
           {(commentCounts.get(node.path) ?? 0) > 0 && <CommentCount n={commentCounts.get(node.path)!} />}
         </div>
@@ -77,7 +75,7 @@ export function FileTree({ mode, onMode, tree, error, current, reviewed, comment
             aria-label={`${f.path} を確認済みにする`}
             title="確認済み"
           />
-          <span className={`fs-st small ${f.status}`}>{STATUS_MARK[f.status]}</span>
+          <StatusMark status={f.status} small />
           <span className="fs-tree-name">{node.name}</span>
           {n > 0 && <CommentCount n={n} />}
           <span className="fs-tree-counts">

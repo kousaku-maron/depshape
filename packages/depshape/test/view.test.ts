@@ -45,61 +45,37 @@ function outline(nodes: ViewNode[], depth = 0): string[] {
 }
 
 describe("buildChangesView", () => {
-  it("shows changed files, their targets, and a rest row for the existing files", () => {
-    const v = buildChangesView(model, root, byPath, new Set());
-    expect(outline(v.roots)).toEqual([
-      "app(open)",
-      "  internal(open)",
-      "    driver(open)",
-      "      api(dir)",
-      "      ほか 1 フォルダ(rest)",
-      "    handler(open)",
-      "      new.go(file)",
-      "      ほか 2 ファイル(rest)",
-      "    ほか 1 フォルダ(rest)",
-      "  ほか 1 フォルダ(rest)",
-    ]);
-    // the rest row stands for the hidden existing files, so their imports still have a source
-    expect(v.fileRep.get("app/internal/handler/a.go")).toBe("r:app/internal/handler");
+  it("shows only the changed files and the folders they sit in, like fileshape's 変更 tree", () => {
+    const v = buildChangesView(model, root);
+    // app/internal/handler is one chain of single folders, so it is one row
+    expect(outline(v.roots)).toEqual(["app/internal/handler(open)", "  new.go(file)"]);
     expect(v.fileRep.get("app/internal/handler/new.go")).toBe("f:app/internal/handler/new.go");
-    // usecase is only imported by unchanged files, so it is hidden until a folder is revealed
+    // no "ほか N" rows: unchanged files, and the packages the change imports, are not in this tree
+    expect(v.fileRep.has("app/internal/handler/a.go")).toBe(false);
+    expect(v.pkgRep.has("app/internal/driver/api")).toBe(false);
     expect(v.pkgRep.has("app/internal/usecase")).toBe(false);
-    expect(v.pkgRep.get("app/internal/driver/api")).toBe("d:app/internal/driver/api");
   });
 
-  it("revealing a folder opens its rest row in place; closing it folds the items back", () => {
-    const open = buildChangesView(model, root, byPath, new Set(["app/internal/handler"]));
-    const lines = outline(open.roots);
-    const at = lines.indexOf("      ほか 2 ファイル(rest)");
-    // changed file first, then the opened group holding the existing files
-    expect(lines.slice(at - 1, at + 3)).toEqual(["      new.go(file)", "      ほか 2 ファイル(rest)", "        a.go(file)", "        b.go(file)"]);
-    expect(open.fileRep.get("app/internal/handler/a.go")).toBe("f:app/internal/handler/a.go");
-
-    const closed = buildChangesView(model, root, byPath, new Set());
-    expect(closed.fileRep.get("app/internal/handler/a.go")).toBe("r:app/internal/handler");
-  });
-
-  it("a revealed folder's hidden subfolders go into its rest group", () => {
-    const v = buildChangesView(model, root, byPath, new Set(["app/internal/driver"]));
-    const lines = outline(v.roots);
-    const at = lines.indexOf("      ほか 1 フォルダ(rest)");
-    expect(lines.slice(at - 1, at + 2)).toEqual(["      api(dir)", "      ほか 1 フォルダ(rest)", "        other(dir)"]);
+  it("keeps sibling folders with changes apart", () => {
+    const g: DiffGraph = { ...graph, files: [...graph.files.filter((f) => f.path !== "app/internal/usecase/u.go"), file("app/internal/usecase/u.go", "modified")] };
+    const m = buildModel(g);
+    const t = buildTree(m);
+    expect(outline(buildChangesView(m, t.root).roots)).toEqual(["app/internal(open)", "  handler(open)", "    new.go(file)", "  usecase(open)", "    u.go(file)"]);
   });
 
   it("a folded folder shows as one row and stands for everything inside it", () => {
-    const v = buildChangesView(model, root, byPath, new Set(), new Set(["app/internal/handler"]));
+    const v = buildChangesView(model, root, new Set(["app/internal/handler"]));
     const lines = outline(v.roots);
-    expect(lines).toContain("    handler(open)");
-    expect(lines.some((l) => l.includes("new.go"))).toBe(false);
+    expect(lines).toEqual(["app/internal/handler(open)"]);
     expect(v.fileRep.get("app/internal/handler/new.go")).toBe("d:app/internal/handler");
-    expect(v.roots[0].children[0].children.find((n) => n.label === "handler")?.collapsed).toBe(true);
+    expect(v.roots[0].collapsed).toBe(true);
   });
 
   it("folds a chain of single folders into one row", () => {
     const g: DiffGraph = { ...graph, files: [file("x/y/z/new.go", "added")], edges: [] };
     const m = buildModel(g);
     const t = buildTree(m);
-    const v = buildChangesView(m, t.root, t.byPath, new Set());
+    const v = buildChangesView(m, t.root);
     expect(outline(v.roots)).toEqual(["x/y/z(open)", "  new.go(file)"]);
     expect(v.roots[0].path).toBe("x/y/z");
   });

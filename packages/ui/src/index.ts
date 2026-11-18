@@ -5,7 +5,7 @@ export { CommentInput } from "./CommentInput";
 export { CommentCard, CommentComposer, type CommentCardProps, type CommentComposerProps } from "./CommentParts";
 export { COMMENT_STATE_LABEL, loadCommentList, newCommentId, promptHeader, saveCommentList, type CommentStateName } from "./comments";
 export { hashOf } from "./hash";
-export { ChangeCounts, StatusCounts, type ChangeStats, type StatusStats } from "./Stats";
+export { ChangeCounts, STATUS_LABEL, StatusCounts, StatusMark, type ChangeStats, type MarkStatus, type StatusStats } from "./Stats";
 export { CheckIcon, ChevronIcon, CommentIcon, CopyIcon, DatabaseIcon, EyeIcon, FileIcon, GraphIcon, PinIcon, RefreshIcon } from "./icons";
 export type { CommentReport, ModuleViewProps, OpenRequest, ShapeModule } from "./module";
 export { loadJSON, loadPref, removeKey, saveJSON, savePref, useStoredSet } from "./storage";
