@@ -45,49 +45,15 @@ ins,
   height: 100%;
 }
 
-.top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  /* the same height as the other modules' first row */
-  min-height: 44px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-soft);
-  flex-wrap: wrap;
-}
-
-.counts {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.counts .slabel {
-  color: var(--muted);
-  font-size: var(--fs-sm);
-}
-
-.counts .sep {
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-  margin: 0 4px;
-}
-
-.counts .vcount {
+.vcount {
   color: var(--values);
   font-size: var(--fs-sm);
   font-weight: 600;
 }
 
-.counts .vcount.zero {
+.vcount.zero {
   color: var(--muted);
   font-weight: 400;
-}
-
-.spacer {
-  flex: 1;
 }
 
 /* list | line | diagram | line | panel; the widths come from the dragged lines (layout.ts) */

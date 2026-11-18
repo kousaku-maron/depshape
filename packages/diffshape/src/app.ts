@@ -1,4 +1,4 @@
-import { resolveSources, type Analyzer, type CompareOptions, type ResolvedSources } from "@diffshape/core";
+import { HttpError, resolveSources, type Analyzer, type CompareOptions, type ResolvedSources } from "@diffshape/core";
 
 /*
  * One comparison analyzed by every module. The comparison is resolved once and shared, and each module
@@ -49,5 +49,15 @@ export class App {
 
   result(id: string): Promise<ModuleResult> {
     return this.results.get(id) ?? Promise.resolve({ error: `unknown module: ${id}` });
+  }
+
+  /** One of a module's own endpoints, on the current comparison and the module's data */
+  async call(id: string, name: string, url: URL): Promise<unknown> {
+    const a = this.analyzers.find((x) => x.id === id);
+    const handler = a?.api?.[name];
+    if (!handler) throw new HttpError(404, `unknown endpoint: ${id}/${name}`);
+    const r = await this.result(id);
+    if ("error" in r) throw new HttpError(409, r.error);
+    return handler(url, { sources: this.sources, data: r.data });
   }
 }

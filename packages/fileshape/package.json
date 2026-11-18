@@ -1,0 +1,29 @@
+{
+  "name": "@diffshape/fileshape",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The fileshape module of diffshape: the plain line diff of every changed file, like GitHub's Files changed. Bundled into the diffshape app, not published on its own.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ui": "./ui/src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p ui/tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@diffshape/core": "workspace:*",
+    "@diffshape/ui": "workspace:*",
+    "@types/node": "^22.20.5",
+    "@types/prismjs": "1.26.5",
+    "@types/react": "18.3.12",
+    "prismjs": "1.30.0",
+    "react": "18.3.1",
+    "react-markdown": "9.1.0",
+    "remark-gfm": "4.0.1",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
+  }
+}
