@@ -32,6 +32,8 @@ export interface ReviewComment {
    * for the comment; a comment on a change still resolves when its file leaves the diff.
    */
   unchanged?: boolean;
+  /** The agent whose AI review wrote it ("Claude Code"); a comment of the user has none */
+  ai?: string;
 }
 
 export type CommentState = "open" | "updated" | "resolved";

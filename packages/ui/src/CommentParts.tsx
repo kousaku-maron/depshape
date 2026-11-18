@@ -17,6 +17,8 @@ export interface CommentCardProps {
   top?: ReactNode;
   /** Next to the state, e.g. "2件" */
   meta?: ReactNode;
+  /** The agent that wrote it in an AI review ("Claude Code"); a comment of the user has none */
+  ai?: string;
   /** Lit from the outside (its target is hovered) */
   lit?: boolean;
   /** Being edited in a composer elsewhere */
@@ -43,6 +45,11 @@ export function CommentCard(p: CommentCardProps) {
         <span className={`ds-comment-state ${p.state}`} title={p.stateTitle}>
           {COMMENT_STATE_LABEL[p.state]}
         </span>
+        {p.ai && (
+          <span className="ds-comment-ai" title={`${p.ai} のレビューが付けたコメント`}>
+            AI
+          </span>
+        )}
         {p.meta && <span className="ds-muted">{p.meta}</span>}
         <span className="ds-spacer" />
         <button className="ds-link" onClick={() => void copy()} title="このコメントだけ AI 用にコピー">

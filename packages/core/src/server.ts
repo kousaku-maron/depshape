@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { HttpError, RawBody } from "./module.js";
 
@@ -25,6 +25,40 @@ export function hostAllowed(listenHost: string, hostHeader: string | undefined):
   }
 }
 
+export const isLoopback = (host: string) => LOOPBACK.has(host);
+
+/**
+ * Whether a request may change something (start an agent): only on a server that listens on loopback,
+ * and only from this server's own page. A page of another site can send a request here, but its
+ * `Origin` is its own; and it can not send JSON without asking first.
+ */
+export function postAllowed(listenHost: string, headers: { host?: string; origin?: string; "content-type"?: string }): boolean {
+  if (!LOOPBACK.has(listenHost) || !headers.host || !headers.origin) return false;
+  if (!(headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) return false;
+  try {
+    return new URL(headers.origin).host === headers.host;
+  } catch {
+    return false;
+  }
+}
+
+const MAX_BODY = 2 * 1024 * 1024;
+
+async function readJSON(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > MAX_BODY) throw new HttpError(413, "request too large");
+    chunks.push(chunk as Buffer);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "null");
+  } catch {
+    throw new HttpError(400, "invalid JSON");
+  }
+}
+
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -41,6 +75,8 @@ export interface ServeOptions {
   port: number;
   /** JSON endpoints by path, e.g. { "/api/graph": (url) => analyze(...) } */
   api: Record<string, (url: URL) => Promise<unknown>>;
+  /** Endpoints that change something, by path: POST with a JSON body, from this server's own page only (see postAllowed) */
+  post?: Record<string, (body: unknown, url: URL) => Promise<unknown>>;
 }
 
 export async function startServer(opts: ServeOptions): Promise<{ server: Server; url: string }> {
@@ -51,6 +87,15 @@ export async function startServer(opts: ServeOptions): Promise<{ server: Server;
         return;
       }
       const url = new URL(req.url ?? "/", "http://localhost");
+      const post = opts.post?.[url.pathname];
+      if (post) {
+        if (req.method !== "POST") throw new HttpError(405, "POST only");
+        if (!postAllowed(opts.host, req.headers)) throw new HttpError(403, "forbidden origin");
+        const body = await post(await readJSON(req), url);
+        res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" });
+        res.end(JSON.stringify(body ?? null));
+        return;
+      }
       const handler = opts.api[url.pathname];
       if (handler) {
         const body = await handler(url);

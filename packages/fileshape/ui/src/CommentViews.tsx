@@ -53,6 +53,7 @@ export function Card({ c, showWhere }: { c: ReviewComment; showWhere?: boolean }
     <CommentCard
       body={c.body}
       state={at.state}
+      ai={c.ai}
       top={
         showWhere ? (
           <span className="fs-comment-where">

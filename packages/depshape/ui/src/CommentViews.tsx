@@ -101,6 +101,7 @@ export const CommentSidebar = forwardRef<HTMLTextAreaElement, CommentSidebarProp
                   key={c.id}
                   body={c.body}
                   state={state}
+                  ai={c.ai}
                   meta={c.targets.length > 1 ? `${c.targets.length}件` : undefined}
                   lit={props.hoveredKeys?.some((k) => c.targets.includes(k))}
                   editing={draft.editingId === c.id}

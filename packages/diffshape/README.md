@@ -6,7 +6,7 @@ git の差分の「形」を、push 前のローカルレビューで確かめ�
 - **依存**（[depshape](https://github.com/kousaku-maron/diffshape/tree/main/packages/depshape)）: フォルダ・ファイル間の依存関係がどう変わったかを、既存の構造と並べて見せます（Go / TypeScript / JavaScript）
 - **DB**（[dbshape](https://github.com/kousaku-maron/diffshape/tree/main/packages/dbshape)）: PostgreSQL のスキーマ（テーブル・カラム・制約・外部キー・CHECK の値）がどう変わったかを、ER 図の差分で見せます
 
-どれも git から直接ファイルを読みます。ビルドツールのインストール、DB への接続、外部サービスは要りません。事実だけを見せ、判断はレビューする人が行います。
+どれも git から直接ファイルを読みます。ビルドツールのインストール、DB への接続、外部サービスは要りません。事実だけを見せ、判断はレビューする人が行います。手元に Claude Code か Codex があれば、同じ画面からレビューと修正を任せることもできます（「AI レビューと修正」）。
 
 ## 使い方
 
@@ -42,10 +42,27 @@ npx @kousaku-maron/diffshape . main --merge-base
 ## 画面
 
 - **左のアイコンバー**: 「ファイル」「依存」「DB」を切り替えます。アイコンの数字は変更の件数、青い点は未対応のコメントがあることを示します。読むものがないモジュール（SQL ファイルがないリポジトリの DB など）は薄く表示します。表示中のモジュールは URL（`#file` / `#dep` / `#db`）に残るので、再読み込みしても同じ画面が開きます
-- **ヘッダー**: 比較の対象、「AI 用にコピー」、「再読み込み」。切り替えても、各モジュールで開いていた箱・選んだテーブル・書きかけのコメントはそのまま残ります
+- **ヘッダー**: 比較の対象、「AI 用にコピー」、「AI」（下の「AI レビューと修正」）、「再読み込み」。切り替えても、各モジュールで開いていた箱・選んだテーブル・書きかけのコメントはそのまま残ります
 - **AI 用にコピー**: すべてのモジュールの未対応のコメントを、1つのプロンプトにまとめてコピーします（ファイルは `path:L12` とその行のコード、依存は import の状態と既存の依存のパターン、DB は SQL ファイルの定義位置つき）。Claude Code / Codex などにそのまま貼れます
 - **再読み込み**: AI がファイルを書き換えたあとに、すべてを解析し直します。開いていた状態はそのまま残ります
 - **DB が複数ある monorepo**: DB モジュールの中で DB を切り替えます（`atlas.hcl` ごと、または名前付きの `--schema` ごと）
+
+## AI レビューと修正
+
+作業ディレクトリとの比較（`diffshape` / `diffshape . main --merge-base` / `diffshape working`）では、ヘッダーの「AI」から、手元の Claude Code か Codex にレビューと修正をさせられます。diffshape はその PC に入っている `claude` / `codex` コマンドをそのまま起動するだけで、API キーやログインは扱いません（ターミナルで使えていれば動きます）。どちらも入っていないとき、コミット同士の比較のときは、ボタンを出しません。
+
+| 実行 | すること |
+|---|---|
+| レビュー | 差分を読んでコメントを付けます。ファイルは変えません。コメントは自分で付けたものと同じ場所に「AI」の印つきで並び、編集も削除もできます |
+| 修正 | 未対応のコメント（自分のものも AI のものも）に対応するよう、作業ディレクトリのファイルを編集します。終わると自動で読み直すので、コメントの「解消済み？」「コメント後に変更あり」で結果を確かめられます |
+| レビューして修正 | レビューのあと、付いたコメントを続けて修正します |
+
+- **エージェント・モデル・Effort** は、レビュー用と修正用を別々に選べます（Codex にレビューさせて Claude Code に直させる、など）。モデルと Effort の一覧は、入っている CLI から読みます。選ばなければ CLI の設定どおりです
+- **範囲**: 表示中の画面だけか、すべての画面か。依存の画面では追加した import やファイルに、DB の画面ではテーブル・カラム・制約などにコメントが付きます
+- **レビューは読むだけ**（`claude -p --permission-mode plan` / `codex exec --sandbox read-only`）、**修正は編集とコマンドの実行を許して**起動します（`--permission-mode auto` / `--sandbox workspace-write`）。確認なしで全部を通すオプションは使いません
+- **修正の前の状態は残ります**: 修正を始める前の作業ディレクトリを `refs/diffshape/before-fix` に取っておきます（作業ディレクトリとステージ済みの状態は変えません）。`diffshape . refs/diffshape/before-fix` で AI が変えた分だけを見られ、`git restore --source=refs/diffshape/before-fix --worktree -- <path>` でファイルを戻せます
+- **起動できるのはこの画面からだけ**です。別のサイトのページからのリクエストでは始まらず、`--host` でほかの端末に公開しているときは、AI の機能そのものを止めます
+- `claude` / `codex` が PATH にないときは、環境変数 `DIFFSHAPE_CLAUDE` / `DIFFSHAPE_CODEX` に実行ファイルのパスを指定できます
 
 それぞれの画面の見方は、[fileshape](https://github.com/kousaku-maron/diffshape/tree/main/packages/fileshape)、[depshape](https://github.com/kousaku-maron/diffshape/tree/main/packages/depshape)、[dbshape](https://github.com/kousaku-maron/diffshape/tree/main/packages/dbshape) の README を見てください。
 

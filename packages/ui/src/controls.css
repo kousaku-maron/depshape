@@ -86,6 +86,31 @@
   background: var(--bg);
 }
 
+/* ---- a select box, the height of a button */
+
+.ds-select {
+  height: var(--control-h);
+  max-width: 100%;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs);
+  cursor: pointer;
+}
+
+.ds-select:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.ds-select:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
 /* ---- segmented toggle: one of a few views */
 
 .ds-seg {

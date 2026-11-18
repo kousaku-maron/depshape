@@ -79,6 +79,7 @@ function Card({ c }: { c: ReviewComment }) {
     <CommentCard
       body={c.body}
       state={state}
+      ai={c.ai}
       stateTitle={state === "updated" ? `コメントしたときは: ${c.snapshot ?? "変更なし"}` : state === "resolved" ? "対象がなくなったか、比較元と同じに戻りました" : undefined}
       onCopy={() => copyText(formatPrompt(api.data, [c], { includeResolved: true }).text)}
       onEdit={() => api.edit(c.id)}

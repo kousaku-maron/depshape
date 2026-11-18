@@ -5,6 +5,7 @@ import { erTables } from "../src/er.js";
 import type { DbShapeResult } from "../src/model.js";
 import { buildSchema, type Parser } from "../src/schema.js";
 import { changeText, commentState, formatPrompt, locationOf, newComment, type CommentTarget } from "../ui/src/comments.js";
+import { parseTarget, reviewList, toComments } from "../ui/src/review.js";
 
 let parse: Parser;
 beforeAll(async () => {
@@ -115,5 +116,50 @@ describe("formatPrompt", () => {
     );
     // as a section of the prompt the app combines from every module
     expect(formatPrompt(reverted, comments, { header: false }).text.split("\n").slice(0, 3)).toEqual(["スキーマの SQL: atlas.hcl の src", "", "1. カラム billing.invoices.price_id（今回追加: uuid）"]);
+  });
+});
+
+describe("AI review", () => {
+  const item = (target: string | null, body = "NOT NULL では？") => ({ module: "db", body, target, path: null, side: null, line: null, endLine: null, code: null });
+
+  it("tells the reviewer every changed part of a database, with the target a comment names", () => {
+    const text = reviewList(result(BASE, CHANGED));
+    expect(text.split("\n").slice(0, 3)).toEqual([
+      "スキーマの SQL: atlas.hcl の src",
+      "変更:",
+      `- テーブル billing.invoices（今回変更（カラム +1 −1 ~1、制約 ~1）） 定義: db/billing.sql:1 target: "table:billing.invoices:billing.invoices"`,
+    ]);
+    expect(text).toContain(`  - カラム billing.invoices.price_id（今回追加: uuid） 定義: db/billing.sql:5 target: "column:billing.invoices:price_id"`);
+    // a removed column has no place in the target side's files
+    expect(text).toContain(`  - カラム billing.invoices.memo（今回削除: text） target: "column:billing.invoices:memo"`);
+    expect(text).toContain(`- 値 billing.invoices.status（+closed（変更後: draft, open, closed）） 定義: db/billing.sql:6 target: "value:billing.invoices:status"`);
+    // with several databases each target says which one
+    expect(reviewList(result(BASE, CHANGED), "2/")).toContain(`target: "2/column:billing.invoices:price_id"`);
+    expect(reviewList(result(BASE, BASE))).toBe("");
+  });
+
+  it("reads a target back", () => {
+    expect(parseTarget("column:billing.invoices:price_id")).toEqual({ kind: "column", table: T, name: "price_id" });
+    expect(parseTarget("type::billing.mood")).toEqual({ kind: "type", name: "billing.mood" });
+    expect(parseTarget("billing.invoices.price_id")).toBeNull();
+    expect(parseTarget("row:billing.invoices:1")).toBeNull();
+  });
+
+  it("keeps the comments that name a part of the schema, marked as the AI's, with the change they saw", () => {
+    const d = result(BASE, CHANGED);
+    const kept = toComments(
+      [item("column:billing.invoices:price_id"), item("column:billing.invoices:id", "uuid v7 に"), item("column:billing.invoices:memo", "消してよい？"), item("column:billing.invoices:nope"), item("table:billing.none:billing.none"), item("price_id"), item(null)],
+      d,
+      "",
+      "Claude Code",
+    );
+    expect(kept.map((c) => [c.target.name, c.body, c.ai, c.snapshot])).toEqual([
+      ["price_id", "NOT NULL では？", "Claude Code", "今回追加: uuid"],
+      ["id", "uuid v7 に", "Claude Code", undefined],
+      ["memo", "消してよい？", "Claude Code", "今回削除: text"],
+    ]);
+    expect(commentState(d, kept[0])).toBe("open");
+    // another database's comments are not this one's
+    expect(toComments([item("1/column:billing.invoices:price_id"), item("2/column:billing.invoices:total")], d, "2/", "Codex").map((c) => c.target.name)).toEqual(["total"]);
   });
 });

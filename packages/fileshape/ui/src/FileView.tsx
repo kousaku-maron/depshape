@@ -1,4 +1,4 @@
-import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, DIVIDER_W, loadJSON, loadPref, ModuleBar, ReviewProgress, saveJSON, savePref, StatusCounts, type ModuleViewProps } from "@diffshape/ui";
+import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, DIVIDER_W, loadJSON, loadPref, ModuleBar, ReviewProgress, saveJSON, savePref, StatusCounts, type AiPlaced, type ModuleViewProps } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiffFile, FileShapeRun } from "../../src/types";
 import { fetchContent, fetchFileList, fetchPlain } from "./api";
@@ -8,7 +8,8 @@ import type { ViewMode } from "./DiffTable";
 import { FileBlock, LARGE_LINES, previewOf, type FileViewKind } from "./FileBlock";
 import { FileTree, type TreeMode } from "./FileTree";
 import { loadReviewed, reviewedFiles, reviewScope, reviewTargets, saveReviewed } from "./reviewed";
-import { buildTree, countLines, countStatus, expand, filesInTreeOrder, gapsOf, lineCount, oldToNew, reveal, unchangedFile, type Expansion, type Gap } from "./model";
+import { buildTree, canExpand, countLines, countStatus, expand, filesInTreeOrder, gapsOf, lineCount, oldToNew, reveal, unchangedFile, type Expansion, type Gap } from "./model";
+import { fileFor, placeItem, reviewSection } from "./review";
 
 /*
  * The file module: the line diff of every changed file. The changed files as a tree on the left,
@@ -20,7 +21,7 @@ const TREE_W_KEY = "fileshape.treeWidth";
 const TREE_W = 280;
 const NO_EXPANSION: Expansion = {};
 
-export function FileView({ data: diff, active, onComments, request }: ModuleViewProps<FileShapeRun>) {
+export function FileView({ data: diff, active, onComments, request, ai, onAi }: ModuleViewProps<FileShapeRun>) {
   const scope = reviewScope(diff);
   const [comments, setComments] = useState<ReviewComment[]>(() => loadComments(scope));
 
@@ -279,11 +280,49 @@ export function FileView({ data: diff, active, onComments, request }: ModuleView
     return m;
   }, [comments]);
 
-  // tell the shell how many comments are open, and how to copy them
+  // tell the shell how many comments are open, how to copy them, and what an AI reviewer is told
   useEffect(() => {
     const open = comments.filter((c) => commentState(run, c, contents.get(c.path)) !== "resolved").length;
-    onComments({ open, prompt: () => formatPrompt(run, comments, { header: false, contents }).text });
-  }, [comments, run, contents, onComments]);
+    onComments({ open, prompt: () => formatPrompt(run, comments, { header: false, contents }).text, review: () => reviewSection(diff) });
+  }, [comments, run, contents, diff, onComments]);
+
+  // ---- an AI review: each comment that is for this module goes to the lines whose code it quotes.
+  // A file is read first when the comment is on lines outside its hunks, or on a file without changes.
+  const commentsRef = useRef(comments);
+  commentsRef.current = comments;
+  const aiSeen = useRef(0);
+  const [aiPlaced, setAiPlaced] = useState<AiPlaced | null>(null);
+  useEffect(() => {
+    if (!ai || ai.seq === aiSeen.current) return;
+    aiSeen.current = ai.seq;
+    const items = ai.items.filter((i) => i.module === "file");
+    void (async () => {
+      const added: ReviewComment[] = [];
+      for (const item of items) {
+        if (!item.path) continue;
+        let file = fileFor(diff, item.path);
+        let unchanged = false;
+        if (!file) {
+          const read = await fetchPlain(item.path).catch(() => null);
+          if (!read) continue; // no such file
+          file = unchangedFile(item.path, read);
+          unchanged = true;
+        }
+        let at = placeItem(file, item);
+        if (!at?.exact && canExpand(file)) {
+          const content = await ensureContent(file.path).catch(() => undefined);
+          if (content) at = placeItem(file, item, content) ?? at;
+        }
+        if (at) added.push({ ...newComment(at.target, item.body, unchanged), ai: ai.agent });
+      }
+      if (added.length) update([...commentsRef.current, ...added]);
+      setAiPlaced({ seq: ai.seq, placed: added.length, dropped: items.length - added.length });
+    })();
+  }, [ai, diff, ensureContent, update]);
+  // after the report above, so the shell has the new comments when it hears they are placed
+  useEffect(() => {
+    if (aiPlaced) onAi(aiPlaced);
+  }, [aiPlaced, onAi]);
 
   // ---- the file being read: the last one whose header has reached the top
   const [current, setCurrent] = useState<string | null>(files[0]?.path ?? null);

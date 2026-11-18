@@ -3,3 +3,4 @@ export * from "./git.js";
 export * from "./compare.js";
 export * from "./server.js";
 export * from "./module.js";
+export * from "./agent.js";

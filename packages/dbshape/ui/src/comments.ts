@@ -29,6 +29,8 @@ export interface ReviewComment {
   createdAt: number;
   /** The change when the comment was written (undefined: the part was unchanged) */
   snapshot?: string;
+  /** The agent whose AI review wrote it ("Claude Code"); a comment of the user has none */
+  ai?: string;
 }
 
 export type CommentState = "open" | "updated" | "resolved";

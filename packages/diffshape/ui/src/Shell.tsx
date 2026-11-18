@@ -1,10 +1,12 @@
-import { copyText, CopyIcon, promptHeader, RefreshIcon, type CommentReport, type OpenRequest, type ShapeModule } from "@diffshape/ui";
+import { copyText, CopyIcon, RefreshIcon, type AiBatch, type AiPlaced, type CommentReport, type OpenRequest, type ShapeModule } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { commentsPrompt } from "./ai";
+import { AiControl } from "./AiControl";
 import { MODULES } from "./modules";
 
 /*
- * The diffshape app: an icon rail to switch modules, a header with the comparison, the reload and the
- * AI copy of every module's comments, and the modules' views. Views stay mounted while hidden, so a
+ * The diffshape app: an icon rail to switch modules, a header with the comparison, the reload, the
+ * AI copy of every module's comments and the AI review and fix, and the modules' views. Views stay mounted while hidden, so a
  * module keeps where it was (open boxes, the selected table, a half-written comment).
  */
 
@@ -12,6 +14,7 @@ interface Info {
   repoRoot: string;
   targetLabel: string;
   baseLabel: string;
+  baseRev: string | null;
   modules: string[];
 }
 
@@ -121,22 +124,32 @@ export function Shell() {
     return f;
   };
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     setReloading(true);
     await load(true);
     setReloading(false);
-  };
+  }, [load]);
 
-  const flash = (text: string) => {
+  const flash = useCallback((text: string) => {
     setNote(text);
-    window.setTimeout(() => setNote((n) => (n === text ? null : n)), 2500);
+    window.setTimeout(() => setNote((n) => (n === text ? null : n)), 4000);
+  }, []);
+
+  // an AI review's comments go to every module; each says what it kept (see AiControl)
+  const [aiBatch, setAiBatch] = useState<AiBatch | null>(null);
+  const [aiAcks, setAiAcks] = useState<Record<string, AiPlaced>>({});
+  const ackers = useRef(new Map<string, (p: AiPlaced) => void>());
+  const acker = (id: string) => {
+    let f = ackers.current.get(id);
+    if (!f) ackers.current.set(id, (f = (p: AiPlaced) => setAiAcks((prev) => ({ ...prev, [id]: p }))));
+    return f;
   };
+  const [fixing, setFixing] = useState(false);
   const withComments = modules.filter((m) => (reports[m.id]?.open ?? 0) > 0);
   const openTotal = withComments.reduce((n, m) => n + reports[m.id].open, 0);
   const copyAll = async () => {
     if (!info || openTotal === 0) return;
-    const sections = withComments.map((m) => [`## ${m.description}`, "", reports[m.id].prompt().trimEnd()].join("\n"));
-    await copyText([...promptHeader(info), "", ...sections.flatMap((s) => [s, ""])].join("\n").trimEnd() + "\n");
+    await copyText(commentsPrompt(info, withComments.map((m) => ({ id: m.id, description: m.description, comments: reports[m.id].prompt() }))));
     flash(`${openTotal} 件をコピーしました`);
   };
 
@@ -171,7 +184,8 @@ export function Shell() {
           <CopyIcon size={13} />
           AI 用にコピー{openTotal > 0 ? `（${openTotal}）` : ""}
         </button>
-        <button className="ds-btn" onClick={() => void reload()} disabled={reloading} title="リポジトリを読み直して比較し直す">
+        <AiControl info={info} modules={modules} current={current} reports={reports} acks={aiAcks} onBatch={setAiBatch} onReload={reload} onFixing={setFixing} flash={flash} />
+        <button className="ds-btn" onClick={() => void reload()} disabled={reloading || fixing} title={fixing ? "AI が修正しています（終わると自動で読み直します）" : "リポジトリを読み直して比較し直す"}>
           <RefreshIcon size={13} className={reloading ? "shell-spin" : undefined} />
           {reloading ? "解析中…" : "再読み込み"}
         </button>
@@ -199,6 +213,8 @@ export function Shell() {
                   modules={moduleIds}
                   openIn={openIn}
                   request={requests[m.id] ?? null}
+                  ai={aiBatch}
+                  onAi={acker(m.id)}
                 />
               )}
             </section>
