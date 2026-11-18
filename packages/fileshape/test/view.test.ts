@@ -4,7 +4,7 @@ import type { DiffFile, FileShapeRun } from "../src/types.js";
 import { formatPrompt, locate, newComment } from "../ui/src/comments";
 import { highlightFile, highlightLines, languageOf } from "../ui/src/highlight";
 import { reviewedFiles, reviewTargets } from "../ui/src/reviewed";
-import { buildRows, buildTree, changeHash, expand, filesInTreeOrder, filterTree, gapsOf, markRanges, oldToNew, pairLines, reveal, wordRanges, type Row } from "../ui/src/model";
+import { buildRows, buildTree, changedFolders, changeHash, unchangedFile, expand, filesInTreeOrder, filterTree, gapsOf, markRanges, oldToNew, pairLines, reveal, wordRanges, type Row } from "../ui/src/model";
 
 const file = (path: string, extra: Partial<DiffFile> = {}): DiffFile => ({ path, status: "modified", additions: 0, deletions: 0, chunks: [], ...extra });
 
@@ -19,6 +19,29 @@ describe("file tree", () => {
     const src = tree.children[1];
     expect(src.children.map((c) => c.name)).toEqual(["app", "lib/deep"]);
     expect(filesInTreeOrder(tree).map((f) => f.path)).toEqual(["pkg/only/one.go", "src/app/a.ts", "src/app/b.ts", "src/lib/deep/c.ts", "README.md"]);
+  });
+
+  it("adds the rest of the repository as plain files (the 全体 view)", () => {
+    const tree = buildTree([file("src/app/a.ts")], ["src/app/a.ts", "src/app/z.ts", "src/lib/x.ts", "README.md"]);
+    expect(tree.children.map((c) => [c.name, !!c.plain])).toEqual([
+      ["src", false],
+      ["README.md", true],
+    ]);
+    const app = tree.children[0].children[0];
+    expect(app.children.map((c) => [c.name, !!c.file, !!c.plain])).toEqual([
+      ["a.ts", true, false],
+      ["z.ts", false, true],
+    ]);
+    // only the changes are in the list, and their folders open first
+    expect(filesInTreeOrder(tree).map((f) => f.path)).toEqual(["src/app/a.ts"]);
+    expect([...changedFolders(tree)].sort()).toEqual(["src", "src/app"]);
+    expect(filesInTreeOrder(filterTree(tree, "lib/x")!)).toEqual([]);
+    expect(filterTree(tree, "lib/x")!.children[0].children[0].children[0].path).toBe("src/lib/x.ts");
+  });
+
+  it("does not count an opened unchanged file as a change", () => {
+    const tree = buildTree([unchangedFile("docs/a.md", { lines: ["x"] })], ["docs/a.md", "docs/b.md"]);
+    expect(changedFolders(tree).size).toBe(0);
   });
 
   it("filters by path", () => {
@@ -255,5 +278,32 @@ describe("reviewed marks", () => {
     expect(reviewedFiles(reviewTargets([before]), marks)).toEqual(new Set(["x.ts"]));
     const again = diff(["@@ -1,1 +1,1 @@", "-a", "+c"]);
     expect(reviewedFiles(reviewTargets([again]), marks)).toEqual(new Set());
+  });
+});
+
+describe("unchanged files", () => {
+  it("shows every line as context, with no hunk header", () => {
+    const f = unchangedFile("a.ts", { lines: ["one", "two"] });
+    expect(f.unchanged).toBe(true);
+    expect(gapsOf(f, 2)).toEqual([]);
+    expect(buildRows(f, undefined, {})).toEqual([
+      { kind: "line", line: { type: "normal", content: "one", oldLine: 1, newLine: 1 } },
+      { kind: "line", line: { type: "normal", content: "two", oldLine: 2, newLine: 2 } },
+    ]);
+  });
+
+  it("knows a file still being read, a binary one, a large one and an empty one", () => {
+    expect(unchangedFile("a", undefined)).toMatchObject({ loading: true, chunks: [] });
+    expect(unchangedFile("a", { binary: true })).toMatchObject({ binary: true, chunks: [] });
+    expect(unchangedFile("a", { large: true })).toMatchObject({ large: true, chunks: [] });
+    expect(unchangedFile("a", { lines: [] })).toMatchObject({ chunks: [] });
+  });
+
+  it("places and copies a comment on one of its lines without a side", () => {
+    const f = unchangedFile("a.ts", { lines: ["one", "two"] });
+    const run: FileShapeRun = { repoRoot: "/r", targetLabel: "t", baseLabel: "b", files: [f] };
+    const c = newComment({ path: "a.ts", side: "new", line: 2, code: "two" }, "why?", true);
+    expect(locate(f, c)).toEqual({ state: "open", line: 2 });
+    expect(formatPrompt(run, [c], { header: false }).text).toContain("a.ts:L2（2 行目（変更なし））");
   });
 });

@@ -81,13 +81,24 @@
 
 .fs-tree-head {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px;
   border-bottom: 1px solid var(--border);
 }
 
-.fs-filter {
+/* 変更 / 全体: the width of the sidebar, beside the fold button */
+.fs-tree-mode {
   flex: 1;
+}
+
+.fs-tree-mode > button {
+  flex: 1;
+  justify-content: center;
+}
+
+.fs-filter {
+  flex: 1 0 100%;
   min-width: 0;
   height: var(--control-h);
   padding: 0 8px;
@@ -151,6 +162,21 @@
   cursor: pointer;
 }
 
+/* an unchanged file has nothing to mark; keeps its name in line with the changed files */
+.fs-tree-check-space {
+  flex: none;
+  width: 13px;
+}
+
+/* files and folders without changes ("全体"): quieter than the changes, plain again once opened */
+.fs-tree-row.plain .fs-tree-name {
+  color: var(--muted);
+}
+
+.fs-tree-row.plain.shown .fs-tree-name {
+  color: var(--text);
+}
+
 .fs-tree-counts {
   display: inline-flex;
   gap: 4px;
@@ -205,6 +231,11 @@
 .fs-st.removed {
   background: var(--removed-bg);
   color: var(--removed);
+}
+
+/* no change: an empty, outlined box where the letter would be */
+.fs-st.unchanged {
+  border: 1px solid var(--border);
 }
 
 /* ---- buttons in rows */

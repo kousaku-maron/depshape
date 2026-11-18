@@ -6,6 +6,6 @@ import type { FileShapeRun } from "./types.js";
 
 export { analyzeFiles } from "./analyze.js";
 export { parseUnifiedDiff } from "./diff.js";
-export type { DiffChunk, DiffFile, DiffLine, FileShapeRun, FileStatus } from "./types.js";
+export type { DiffChunk, DiffFile, DiffLine, FileShapeRun, FileStatus, PlainFile } from "./types.js";
 
 export const fileAnalyzer: Analyzer<FileShapeRun> = { id: "file", analyze: analyzeFiles, api: fileApi };

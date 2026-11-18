@@ -189,30 +189,33 @@ export const DiffTable = memo(function DiffTable({ file, mode, rows, tokens, byL
   };
 
   if (mode === "unified") {
+    // an unchanged file is the same on both sides: one column of line numbers, comments on the target side
+    const plain = !!file.unchanged;
+    const cols = plain ? 3 : 4;
     return (
-      <table className="fs-table unified">
+      <table className={`fs-table unified${plain ? " plain" : ""}`}>
         <colgroup>
-          <col className="fs-col-num" />
+          {!plain && <col className="fs-col-num" />}
           <col className="fs-col-num" />
           <col className="fs-col-sign" />
           <col />
         </colgroup>
         <tbody>
           {rows.map((r, i) => {
-            if (r.kind === "gap") return gapRow(r, 4, i);
+            if (r.kind === "gap") return gapRow(r, cols, i);
             const l = r.line;
             const side: Side = l.type === "delete" ? "old" : "new";
-            const keys: [Side, number][] = l.type === "normal" ? [["old", l.oldLine!], ["new", l.newLine!]] : [[side, numOf(side, l)!]];
+            const keys: [Side, number][] = plain ? [["new", l.newLine!]] : l.type === "normal" ? [["old", l.oldLine!], ["new", l.newLine!]] : [[side, numOf(side, l)!]];
             const sel = keys.some(([s, n]) => isSelected(s, n));
             return (
               <Fragment key={i}>
                 <tr className={`fs-line ${l.type}${r.opened ? " opened" : ""}${sel ? " selected" : ""}`}>
-                  {num("old", l.type === "add" ? undefined : l)}
+                  {!plain && num("old", l.type === "add" ? undefined : l)}
                   {num("new", l.type === "delete" ? undefined : l)}
                   <td className="fs-sign">{l.type === "add" ? "+" : l.type === "delete" ? "-" : " "}</td>
                   <td className="fs-code">{code(side, l)}</td>
                 </tr>
-                {thread(keys, 4)}
+                {thread(keys, cols)}
               </Fragment>
             );
           })}

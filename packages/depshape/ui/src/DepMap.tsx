@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent 
 import { CommentSidebar, type Draft } from "./CommentViews";
 import { commentState, itemKey, parseKey, type ReviewComment } from "./comments";
 import { DepPanel } from "./DepPanel";
-import { AreaDivider, ChangeCounts, CheckIcon, CommentCount, CommentIcon, PinIcon, StatusCounts, useWidth, type ChangeStats } from "@diffshape/ui";
+import { AreaDivider, ChangeCounts, CheckIcon, CommentCount, CommentIcon, FileIcon, PinIcon, StatusCounts, useWidth, type ChangeStats } from "@diffshape/ui";
 import { unhide } from "./hide";
 import { clampLayout, DEFAULT_SIDE, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { parentDir, type Model, type TreeDir } from "./model";
@@ -47,6 +47,10 @@ export interface DepMapProps {
   onSidebarOpen: (open: boolean) => void;
   /** whether this module is shown (keyboard shortcuts only act then) */
   active: boolean;
+  /** what opening this file in the file module is called ("差分を開く" / "ファイルを開く"), or undefined when it can not be opened */
+  openLabel: (path: string) => string | undefined;
+  /** opens the file in the file module (its line diff, or its content when unchanged); null when that module is not in this run */
+  onOpenFile: ((path: string) => void) | null;
 }
 
 const isAdditive = (e: MouseEvent) => e.metaKey || e.ctrlKey || e.shiftKey;
@@ -72,6 +76,7 @@ const stop = (fn: () => void) => (e: MouseEvent) => {
 
 export function DepMap(props: DepMapProps) {
   const { model, root, tree, open, mode, pins } = props;
+  const fileModule = !!props.onOpenFile;
   const [hovered, setHovered] = useState<string | null>(null);
   const clearTimer = useRef<number | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -301,6 +306,7 @@ export function DepMap(props: DepMapProps) {
     const folded = n.kind === "dir" || (n.kind === "open" && n.collapsed);
     const comments = own || (folded ? innerComments(n.path) : 0);
     const canReview = n.kind === "file" && props.reviewTargets.has(n.path);
+    const openAs = n.kind === "file" ? props.openLabel(n.path) : undefined;
     const isReviewed =
       n.kind === "file" ? props.reviewed.has(n.path) : n.kind === "dir" || n.kind === "open" ? folderReviewed(n.path, props.reviewTargets, props.reviewed) : false;
     const cls = [
@@ -327,6 +333,7 @@ export function DepMap(props: DepMapProps) {
           if (isAdditive(e)) selectKeys([itemKey(n.id)], true);
           else if (n.kind !== "file") toggle(n);
         }}
+        onDoubleClick={openAs ? () => props.onOpenFile?.(n.path) : undefined}
       >
         <span className="ticon">{icon}</span>
         <span className="tlabel">{text}</span>
@@ -351,6 +358,19 @@ export function DepMap(props: DepMapProps) {
         ) : (
           <span className="tbtn-space" />
         )}
+        {fileModule &&
+          (openAs ? (
+            <button
+              className="tbtn tdiff"
+              onClick={stop(() => props.onOpenFile?.(n.path))}
+              title={`${openAs}（ダブルクリックでも開けます）`}
+              aria-label={openAs}
+            >
+              <FileIcon size={13} />
+            </button>
+          ) : (
+            <span className="tbtn-space" />
+          ))}
         <button
           className="tbtn"
           onClick={stop(() => {
@@ -460,6 +480,8 @@ export function DepMap(props: DepMapProps) {
           onToggleTarget={toggleTarget}
           hidden={hidden}
           onHiddenChange={setHidden}
+          openLabel={props.openLabel}
+          onOpenFile={props.onOpenFile}
         />
         {sidebarOpen && (
           <AreaDivider

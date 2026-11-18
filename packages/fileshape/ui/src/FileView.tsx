@@ -1,28 +1,88 @@
 import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, DIVIDER_W, loadJSON, loadPref, ModuleBar, ReviewProgress, saveJSON, savePref, StatusCounts, type ModuleViewProps } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FileShapeRun } from "../../src/types";
-import { fetchContent } from "./api";
+import type { DiffFile, FileShapeRun } from "../../src/types";
+import { fetchContent, fetchFileList, fetchPlain } from "./api";
 import { commentState, fileOf, formatPrompt, inHunks, loadComments, locate, newComment, saveComments, type LineTarget, type ReviewComment } from "./comments";
 import { Card, CommentsContext, targetKey, type CommentsApi } from "./CommentViews";
 import type { ViewMode } from "./DiffTable";
 import { FileBlock, LARGE_LINES, previewOf, type FileViewKind } from "./FileBlock";
-import { FileTree } from "./FileTree";
+import { FileTree, type TreeMode } from "./FileTree";
 import { loadReviewed, reviewedFiles, reviewScope, reviewTargets, saveReviewed } from "./reviewed";
-import { buildTree, countLines, countStatus, expand, filesInTreeOrder, gapsOf, lineCount, oldToNew, reveal, type Expansion, type Gap } from "./model";
+import { buildTree, countLines, countStatus, expand, filesInTreeOrder, gapsOf, lineCount, oldToNew, reveal, unchangedFile, type Expansion, type Gap } from "./model";
 
 /*
  * The file module: the line diff of every changed file. The changed files as a tree on the left,
  * every file's lines on the right (unified or split), line comments, and files marked reviewed.
+ * The tree's "全体" view lists the whole repository; an unchanged file opened from it joins the list.
  */
 
 const TREE_W_KEY = "fileshape.treeWidth";
 const TREE_W = 280;
 const NO_EXPANSION: Expansion = {};
 
-export function FileView({ data: run, active, onComments }: ModuleViewProps<FileShapeRun>) {
+export function FileView({ data: diff, active, onComments, request }: ModuleViewProps<FileShapeRun>) {
+  const scope = reviewScope(diff);
+  const [comments, setComments] = useState<ReviewComment[]>(() => loadComments(scope));
+
+  // ---- unchanged files in the list: the ones opened from the tree (kept per comparison) and the ones
+  // commented while unchanged (so such a comment keeps its file); each is read once per analysis
+  const openedKey = `fileshape.opened:${scope}`;
+  const [opened, setOpened] = useState<string[]>(() => stringList(loadJSON<unknown>(openedKey, [])));
+  useEffect(() => saveJSON(openedKey, opened), [openedKey, opened]);
+  /** path → the file read (null: the repository has no such file) */
+  const [plain, setPlain] = useState<ReadonlyMap<string, DiffFile | null>>(new Map());
+  const reading = useRef(new Set<string>());
+  const inDiff = useMemo(() => new Set(diff.files.map((f) => f.path)), [diff]);
+  const wanted = useMemo(() => [...new Set([...opened, ...comments.filter((c) => c.unchanged).map((c) => c.path)])].filter((p) => !inDiff.has(p)), [opened, comments, inDiff]);
+  useEffect(() => {
+    for (const path of wanted) {
+      if (plain.has(path) || reading.current.has(path)) continue;
+      const batch = reading.current;
+      batch.add(path);
+      const done = (f: DiffFile | null) => {
+        if (reading.current !== batch) return;
+        batch.delete(path);
+        setPlain((prev) => new Map(prev).set(path, f));
+      };
+      fetchPlain(path).then(
+        (r) => done(r ? unchangedFile(path, r) : null),
+        () => done(null),
+      );
+    }
+  }, [wanted, plain]);
+  // a file that is gone from the repository is not kept as opened
+  useEffect(() => {
+    if (opened.some((p) => plain.get(p) === null)) setOpened((prev) => prev.filter((p) => plain.get(p) !== null));
+  }, [plain, opened]);
+  const shownPlain = useMemo(() => wanted.filter((p) => plain.get(p) !== null).map((p) => plain.get(p) ?? unchangedFile(p, undefined)), [wanted, plain]);
+  // what the list, the tree and the comments work on: the diff plus those files
+  const run = useMemo<FileShapeRun>(() => (shownPlain.length ? { ...diff, files: [...diff.files, ...shownPlain] } : diff), [diff, shownPlain]);
+  const commented = useMemo(() => new Set(comments.map((c) => c.path)), [comments]);
+  const closePlain = useCallback((path: string) => setOpened((prev) => prev.filter((p) => p !== path)), []);
+
   const tree = useMemo(() => buildTree(run.files), [run]);
   const files = useMemo(() => filesInTreeOrder(tree), [tree]);
-  const scope = reviewScope(run);
+
+  // ---- the tree: the shown files, or the whole repository (listed when first asked, again after a reload)
+  const [treeMode, setTreeMode] = useState<TreeMode>(() => loadPref<TreeMode>("fileshape", "treeMode", "changes"));
+  const changeTreeMode = (m: TreeMode) => {
+    setTreeMode(m);
+    savePref("fileshape", "treeMode", m);
+  };
+  const [listing, setListing] = useState<{ diff: FileShapeRun; paths?: string[]; error?: string } | null>(null);
+  useEffect(() => {
+    if (treeMode !== "all" || listing?.diff === diff) return;
+    let live = true;
+    fetchFileList().then(
+      (paths) => live && setListing({ diff, paths }),
+      (e: unknown) => live && setListing({ diff, error: e instanceof Error ? e.message : String(e) }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [treeMode, diff, listing]);
+  const allPaths = listing?.diff === diff ? listing.paths : undefined;
+  const sideTree = useMemo(() => (treeMode === "changes" ? tree : allPaths ? buildTree(run.files, allPaths) : null), [treeMode, tree, run, allPaths]);
 
   const [mode, setMode] = useState<ViewMode>(() => loadPref<ViewMode>("fileshape", "mode", "unified"));
   const changeMode = (m: ViewMode) => {
@@ -33,15 +93,15 @@ export function FileView({ data: run, active, onComments }: ModuleViewProps<File
   // ---- reviewed: per repository and comparison; a mark keeps the file's change and falls off when it changes again
   const [marks, setMarks] = useState<Record<string, string>>(() => loadReviewed(scope));
   useEffect(() => setMarks(loadReviewed(scope)), [scope]);
-  const targets = useMemo(() => reviewTargets(run.files), [run]);
+  const targets = useMemo(() => reviewTargets(diff.files), [diff]);
   const reviewed = useMemo(() => reviewedFiles(targets, marks), [targets, marks]);
 
   // ---- folding: a file's own choice wins; otherwise reviewed, generated and very large files start folded
   const [folds, setFolds] = useState<Record<string, boolean>>({});
   const isOpen = (path: string) => {
     if (path in folds) return folds[path];
-    const f = fileOf(run, path)!;
-    return !(reviewed.has(path) || f.generated || lineCount(f) > LARGE_LINES);
+    const f = fileOf(run, path);
+    return !f || !(reviewed.has(path) || f.generated || lineCount(f) > LARGE_LINES);
   };
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
@@ -62,7 +122,10 @@ export function FileView({ data: run, active, onComments }: ModuleViewProps<File
     setContents(new Map());
     setExpansions({});
     setVersion((v) => v + 1);
-  }, [run]);
+    // unchanged files are read again too (one may have changed since, and so be in the diff now)
+    reading.current = new Set();
+    setPlain(new Map());
+  }, [diff]);
   const ensureContent = useCallback((path: string): Promise<string[]> => {
     let p = loading.current.get(path);
     if (!p) {
@@ -127,7 +190,6 @@ export function FileView({ data: run, active, onComments }: ModuleViewProps<File
   );
 
   // ---- comments
-  const [comments, setComments] = useState<ReviewComment[]>(() => loadComments(scope));
   const [composing, setComposing] = useState<LineTarget | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const update = useCallback(
@@ -153,7 +215,7 @@ export function FileView({ data: run, active, onComments }: ModuleViewProps<File
         setComposing(null);
       },
       add: (t, body) => {
-        update([...comments, newComment(t, body)]);
+        update([...comments, newComment(t, body, !!fileOf(run, t.path)?.unchanged)]);
         setComposing(null);
       },
       update: (id, body) => {
@@ -271,7 +333,8 @@ export function FileView({ data: run, active, onComments }: ModuleViewProps<File
     const step = () => {
       const el = blocks.current.get(path);
       if (el) {
-        const off = el.getBoundingClientRect().top - root.getBoundingClientRect().top;
+        // the file's header sticks below the list's top padding: line the file up there, or the header covers its first line
+        const off = el.getBoundingClientRect().top - root.getBoundingClientRect().top - (parseFloat(getComputedStyle(root).paddingTop) || 0);
         // the last files can not reach the top: stop once the scroll is at its end
         const atEnd = root.scrollTop + root.clientHeight >= root.scrollHeight - 1;
         if (Math.abs(off) > 1 && !(atEnd && off > 0)) {
@@ -291,12 +354,29 @@ export function FileView({ data: run, active, onComments }: ModuleViewProps<File
   };
   useEffect(() => () => pin.current?.stop(), []);
 
+  /** A file picked in the tree (or asked for by another module): scrolls to it, joining the list first if it is unchanged */
+  const openFile = (path: string) => {
+    if (!run.files.some((f) => f.path === path)) setOpened((prev) => (prev.includes(path) ? prev : [...prev, path]));
+    select(path);
+  };
+
+  // another module asked for a file (depshape: "差分を開く"): jump to it once this view is shown.
+  // A renamed file is found by either of its paths.
+  const handled = useRef(0);
+  useEffect(() => {
+    if (!request || !active || !scrollRoot || request.seq === handled.current) return;
+    handled.current = request.seq;
+    const f = files.find((x) => x.path === request.target) ?? files.find((x) => x.oldPath === request.target);
+    // not in the list: an unchanged file, opened like one picked in the tree (dropped if there is no such file)
+    openFile(f ? f.path : request.target);
+  });
+
   // ---- sidebar width
   const [treeW, setTreeW] = useState(() => loadJSON<number>(TREE_W_KEY, TREE_W));
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const status = countStatus(run.files);
-  const lines = countLines(run.files);
+  const status = countStatus(diff.files);
+  const lines = countLines(diff.files);
 
   return (
     <CommentsContext.Provider value={api}>
@@ -324,7 +404,17 @@ export function FileView({ data: run, active, onComments }: ModuleViewProps<File
             ))}
           </div>
         </ModuleBar>
-        <FileTree tree={tree} current={current} reviewed={reviewed} commentCounts={commentCounts} onSelect={select} onReviewed={setReviewed} />
+        <FileTree
+          mode={treeMode}
+          onMode={changeTreeMode}
+          tree={sideTree}
+          error={treeMode === "all" && listing?.diff === diff ? (listing.error ?? null) : null}
+          current={current}
+          reviewed={reviewed}
+          commentCounts={commentCounts}
+          onSelect={openFile}
+          onReviewed={setReviewed}
+        />
         <AreaDivider
           title="ドラッグで幅を変更（ダブルクリックで戻す）"
           start={() => treeW}
@@ -367,6 +457,7 @@ export function FileView({ data: run, active, onComments }: ModuleViewProps<File
                 onExpand={onExpand}
                 onView={onView}
                 register={register}
+                onClose={f.unchanged && !commented.has(f.path) ? closePlain : undefined}
               />
             );
           })}
@@ -375,3 +466,5 @@ export function FileView({ data: run, active, onComments }: ModuleViewProps<File
     </CommentsContext.Provider>
   );
 }
+
+const stringList = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);

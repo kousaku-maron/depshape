@@ -34,12 +34,12 @@ export function CommentThread({ comments, composing }: { comments: ReviewComment
     <div className="fs-thread">
       {comments.map((c) =>
         api.editing === c.id ? (
-          <Composer key={c.id} initial={c.body} label={linesLabel(c.side, c.line, c.endLine)} onSave={(b) => api.update(c.id, b)} onCancel={() => api.edit(null)} />
+          <Composer key={c.id} initial={c.body} label={linesLabel(c.side, c.line, c.endLine, c.unchanged)} onSave={(b) => api.update(c.id, b)} onCancel={() => api.edit(null)} />
         ) : (
           <Card key={c.id} c={c} />
         ),
       )}
-      {composing && <Composer initial="" label={linesLabel(composing.side, composing.line, composing.endLine)} onSave={(b) => api.add(composing, b)} onCancel={() => api.compose(null)} />}
+      {composing && <Composer initial="" label={linesLabel(composing.side, composing.line, composing.endLine, !!fileOf(api.run, composing.path)?.unchanged)} onSave={(b) => api.add(composing, b)} onCancel={() => api.compose(null)} />}
     </div>
   );
 }
@@ -60,7 +60,7 @@ export function Card({ c, showWhere }: { c: ReviewComment; showWhere?: boolean }
             {many && <span className="ds-muted"> ほか</span>}
           </span>
         ) : many ? (
-          <span className="ds-muted">{linesLabel(c.side, at.line ?? c.line, at.line !== undefined ? at.endLine : c.endLine)}</span>
+          <span className="ds-muted">{linesLabel(c.side, at.line ?? c.line, at.line !== undefined ? at.endLine : c.endLine, c.unchanged)}</span>
         ) : undefined
       }
       stateTitle={at.state === "updated" ? `コメントしたときは: ${c.code.trim()}` : at.state === "resolved" ? "この行は差分からなくなりました" : undefined}

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { resolveSources } from "@diffshape/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { analyzeFiles } from "../src/analyze.js";
+import { fileApi } from "../src/api.js";
 import type { DiffFile } from "../src/types.js";
 
 let repo: string;
@@ -33,6 +34,9 @@ beforeAll(() => {
   write("pnpm-lock.yaml", "lockfileVersion: 9\n");
   write("img.bin", Buffer.from([0, 1, 2, 3]));
   write("日本語 ファイル.md", "# あ\n");
+  // never changed: only the tree's "全体" view shows them
+  write("src/same.ts", "same 1\r\nsame 2\n");
+  write("assets/same.bin", Buffer.from([0, 9]));
   git("add", ".");
   git("commit", "-q", "-m", "base");
 
@@ -106,5 +110,33 @@ describe("analyzeFiles", () => {
     expect(byPath.get("src/gone.ts")?.status).toBe("removed");
     // nothing left uncommitted
     expect((await run()).run.files).toEqual([]);
+  });
+});
+
+describe("the whole tree (fileApi)", () => {
+  const call = async (name: "files" | "plain" | "content", query: string) => {
+    const sources = await resolveSources(repo, {});
+    const data = await analyzeFiles(sources);
+    return fileApi[name](new URL(`http://x/?${query}`), { sources, data }) as Promise<any>;
+  };
+
+  it("lists every file of the target side, unchanged and untracked ones included", async () => {
+    const { paths } = await call("files", "");
+    expect(paths).toEqual(expect.arrayContaining(["assets/same.bin", "src/same.ts", "src/a.ts", "src/new.ts", "notes/empty.txt"]));
+    expect(paths).not.toContain("src/gone.ts");
+    expect(paths).not.toContain("src/old-name.ts");
+  });
+
+  it("reads an unchanged file, and tells a binary one apart", async () => {
+    expect(await call("plain", "path=src/same.ts")).toEqual({ lines: ["same 1", "same 2"] });
+    expect(await call("plain", "path=assets/same.bin")).toEqual({ binary: true });
+    // the content endpoint serves it too (the Markdown preview reads files through it)
+    expect(await call("content", "path=src/same.ts&side=new")).toEqual({ lines: ["same 1", "same 2"] });
+  });
+
+  it("serves nothing outside the repository's files", async () => {
+    await expect(call("plain", "path=src/gone.ts")).rejects.toMatchObject({ status: 404 });
+    await expect(call("plain", "path=.git/config")).rejects.toMatchObject({ status: 404 });
+    await expect(call("plain", "path=../etc/passwd")).rejects.toMatchObject({ status: 400 });
   });
 });

@@ -1,4 +1,4 @@
-import { copyText, CopyIcon, promptHeader, RefreshIcon, type CommentReport, type ShapeModule } from "@diffshape/ui";
+import { copyText, CopyIcon, promptHeader, RefreshIcon, type CommentReport, type OpenRequest, type ShapeModule } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MODULES } from "./modules";
 
@@ -23,14 +23,32 @@ async function getJSON<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-const fromHash = () => window.location.hash.replace(/^#\/?/, "");
+/** The URL says which module is shown and, after a slash, what it shows (#dep, #file/src/app.ts) */
+function fromHash(): { module: string; target: string | null } {
+  const h = window.location.hash.replace(/^#\/?/, "");
+  const i = h.indexOf("/");
+  if (i < 0) return { module: h, target: null };
+  let target: string;
+  try {
+    target = decodeURIComponent(h.slice(i + 1));
+  } catch {
+    target = h.slice(i + 1);
+  }
+  return { module: h.slice(0, i), target: target || null };
+}
+const toHash = (module: string, target: string) => `${module}/${target.split("/").map(encodeURIComponent).join("/")}`;
 
 export function Shell() {
   const [info, setInfo] = useState<Info | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<Record<string, Loaded>>({});
   const [reloading, setReloading] = useState(false);
-  const [active, setActive] = useState(fromHash());
+  const [active, setActive] = useState(() => fromHash().module);
+  // what each module was last asked to show (by another module, or by the URL it was opened with)
+  const [requests, setRequests] = useState<Record<string, OpenRequest>>(() => {
+    const h = fromHash();
+    return h.target ? { [h.module]: { target: h.target, seq: 1 } } : {};
+  });
   const [reports, setReports] = useState<Record<string, CommentReport>>({});
   const [note, setNote] = useState<string | null>(null);
 
@@ -65,17 +83,35 @@ export function Shell() {
     void load(false);
   }, [load]);
 
-  // the shown module follows the URL (#dep, #db), so a reload or a shared link opens the same one
-  useEffect(() => {
-    const onHash = () => setActive(fromHash());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+  // the shown module follows the URL (#dep, #db, #file/<path>), so a reload, a shared link or the
+  // back button opens the same one, at the same thing
+  const followHash = useCallback(() => {
+    const h = fromHash();
+    setActive(h.module);
+    if (h.target) {
+      const target = h.target;
+      setRequests((prev) => ({ ...prev, [h.module]: { target, seq: (prev[h.module]?.seq ?? 0) + 1 } }));
+    }
   }, []);
+  useEffect(() => {
+    window.addEventListener("hashchange", followHash);
+    return () => window.removeEventListener("hashchange", followHash);
+  }, [followHash]);
   const current = modules.find((m) => m.id === active) ?? modules[0];
   const show = (id: string) => {
     window.location.hash = id;
     setActive(id);
   };
+  const openIn = useCallback(
+    (module: string, target: string) => {
+      const next = toHash(module, target);
+      // the same link again (the user scrolled away since) fires no hashchange: ask again by hand
+      if (window.location.hash.replace(/^#\/?/, "") === next) followHash();
+      else window.location.hash = next;
+    },
+    [followHash],
+  );
+  const moduleIds = useMemo(() => modules.map((m) => m.id), [modules]);
 
   // one stable callback per module, so a view's effect does not run on every shell render
   const reporters = useRef(new Map<string, (r: CommentReport) => void>());
@@ -154,7 +190,17 @@ export function Shell() {
                 </div>
               )}
               {/* a new comparison (say, main moved on) starts the view again; a plain reload keeps its state */}
-              {l.state === "ready" && <m.View key={`${info.targetLabel}|${info.baseLabel}`} data={l.data} active={on} onComments={reporter(m.id)} />}
+              {l.state === "ready" && (
+                <m.View
+                  key={`${info.targetLabel}|${info.baseLabel}`}
+                  data={l.data}
+                  active={on}
+                  onComments={reporter(m.id)}
+                  modules={moduleIds}
+                  openIn={openIn}
+                  request={requests[m.id] ?? null}
+                />
+              )}
             </section>
           );
         })}
