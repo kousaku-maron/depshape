@@ -1,4 +1,4 @@
-import { AreaDivider, ChangeCounts, CheckIcon, CommentCount, CommentIcon, StatusCounts, useWidth, type CommentReport } from "@diffshape/ui";
+import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CheckIcon, CommentCount, CommentIcon, ModuleBar, ReviewProgress, StatusCounts, useWidth, type CommentReport } from "@diffshape/ui";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { schemaFromText } from "../../src/names";
 import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
@@ -157,10 +157,10 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
   return (
     <CommentsContext.Provider value={api}>
       <div className="app">
-        <header className="top">
+        <ModuleBar>
           {switcher}
-          <span className="counts">
-            <span className="slabel">テーブル</span>
+          <BarCounts>
+            <BarLabel>テーブル</BarLabel>
             <StatusCounts
               stats={{
                 added: tables.filter((t) => t.status === "added").length,
@@ -170,24 +170,15 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
               unit="テーブル"
               showZero
             />
-            <span className="sep" />
-            <span className="slabel">値の変化</span>
+            <BarSep />
+            <BarLabel>値の変化</BarLabel>
             <span className={`vcount${d.values.length ? "" : " zero"}`} title="CHECK や ENUM などの値の変化">
               {d.values.length}
             </span>
-          </span>
-          <span className="spacer" />
-          {tables.length > 0 && (
-            <span className="ds-progress" title="確認済みにしたテーブル（内容が変わると外れます）">
-              <span>
-                確認済み {reviewedCount} / {tables.length}
-              </span>
-              <span className="ds-progress-bar">
-                <span style={{ width: `${(reviewedCount / tables.length) * 100}%` }} />
-              </span>
-            </span>
-          )}
-        </header>
+          </BarCounts>
+          <BarSpacer />
+          <ReviewProgress done={reviewedCount} total={tables.length} title="確認済みにしたテーブル（内容が変わると外れます）" />
+        </ModuleBar>
 
         <div className={`body ${sel ? "with-panel" : ""}`} ref={bodyRef} style={{ gridTemplateColumns: gridColumns(bodyW ? clampLayout(layout, bodyW, !!sel) : layout, !!sel) }}>
           <nav className="side" ref={sideRef}>

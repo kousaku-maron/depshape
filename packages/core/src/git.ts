@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -83,6 +83,53 @@ export async function readFiles(
     if (b !== null) result.set(p, b);
   });
   return result;
+}
+
+/**
+ * The patch between two sides (`git diff`), in the same form whatever the user's git config says:
+ * a/ b/ prefixes, renames found, no colors, no external diff tool, paths from the repository root.
+ * Untracked files are not in it (see untrackedFiles).
+ */
+export async function diffPatch(root: string, base: Source, target: Source): Promise<string> {
+  const args = ["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--no-color", "--find-renames", "--src-prefix=a/", "--dst-prefix=b/", "--no-relative"];
+  if (target.kind === "worktree" && base.kind === "index") return git(root, [...args, "--"]);
+  if (base.kind !== "rev") throw new Error("比較元はコミットかステージ済みの状態です");
+  if (target.kind === "rev") return git(root, [...args, base.rev, target.rev, "--"]);
+  if (target.kind === "index") return git(root, [...args, "--cached", base.rev, "--"]);
+  return git(root, [...args, base.rev, "--"]);
+}
+
+/** Files of the working tree that git does not track (respecting .gitignore), with their size */
+export async function untrackedFiles(root: string): Promise<{ path: string; size: number }[]> {
+  const out = await git(root, ["ls-files", "-z", "--others", "--exclude-standard"]);
+  // a nested repository is listed as "dir/"
+  const paths = out.split("\0").filter((p) => p && !p.endsWith("/"));
+  const files = await Promise.all(
+    paths.map(async (path) => {
+      try {
+        const s = await stat(join(root, path));
+        return s.isFile() ? { path, size: s.size } : null;
+      } catch {
+        return null; // removed meanwhile
+      }
+    }),
+  );
+  return files.filter((f): f is { path: string; size: number } => f !== null);
+}
+
+/** One file's bytes on one side, or null when it is not there */
+export async function readBlob(root: string, source: Source, path: string): Promise<Buffer | null> {
+  if (source.kind === "worktree") {
+    try {
+      return await readFile(join(root, path));
+    } catch {
+      return null;
+    }
+  }
+  const spec = `${source.kind === "rev" ? source.rev : ""}:${path}`;
+  return new Promise((resolve) => {
+    execFile("git", ["cat-file", "blob", spec], { cwd: root, encoding: "buffer", maxBuffer: 512 * 1024 * 1024 }, (err, stdout) => resolve(err ? null : stdout));
+  });
 }
 
 /** Runs `git cat-file --batch` and returns contents in request order (null when missing). */

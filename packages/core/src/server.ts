@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize } from "node:path";
+import { HttpError, RawBody } from "./module.js";
 
 /*
  * The local server each tool runs: the built UI as static files plus a few JSON endpoints.
@@ -53,6 +54,12 @@ export async function startServer(opts: ServeOptions): Promise<{ server: Server;
       const handler = opts.api[url.pathname];
       if (handler) {
         const body = await handler(url);
+        if (body instanceof RawBody) {
+          // repository files (an SVG can hold scripts): never run anything, even when opened on its own
+          res.writeHead(200, { "content-type": body.type, "cache-control": "no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox" });
+          res.end(body.body);
+          return;
+        }
         res.writeHead(200, { "content-type": MIME[".json"], "cache-control": "no-store" });
         res.end(JSON.stringify(body));
         return;
@@ -72,7 +79,7 @@ export async function startServer(opts: ServeOptions): Promise<{ server: Server;
       res.writeHead(200, { "content-type": MIME[extname(rel)] ?? "application/octet-stream", ...cache });
       res.end(body);
     } catch (e) {
-      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      res.writeHead(e instanceof HttpError ? e.status : 500, { "content-type": "text/plain; charset=utf-8" });
       res.end(e instanceof Error ? e.message : String(e));
     }
   });

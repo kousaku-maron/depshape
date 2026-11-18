@@ -1,15 +1,20 @@
 import { openBrowser, type Analyzer, type CompareOptions } from "@diffshape/core";
 import { COLORS, dbAnalyzer, formatRunSummary, PLAIN, type DbShapeRun } from "@diffshape/dbshape";
 import { depAnalyzer } from "@diffshape/depshape";
+import { fileAnalyzer } from "@diffshape/fileshape";
 import { App } from "./app.js";
 import { startServer } from "./server.js";
 
 /*
- * The command line. `diffshape` shows every module; `depshape` and `dbshape` are the same app with one
- * module (and keep the --json / --text output of the old commands).
+ * The command line. `diffshape` shows every module; `fileshape`, `depshape` and `dbshape` are the same
+ * app with one module (and keep the --json / --text output of the old commands).
  */
 
-export type ModuleId = "dep" | "db";
+export type ModuleId = "file" | "dep" | "db";
+
+export type Command = "diffshape" | "fileshape" | "depshape" | "dbshape";
+
+const COMMAND_MODULE: Record<Command, ModuleId | undefined> = { diffshape: undefined, fileshape: "file", depshape: "dep", dbshape: "db" };
 
 const TARGETS = `target:
   .            作業ディレクトリ（未コミットの変更すべて）  ※デフォルト
@@ -30,7 +35,7 @@ const SCHEMA = `  --schema <glob>    スキーマの SQL ファイル（複数�
                      DB が複数あるときは --schema billing=services/billing/**/*.sql のように名前を付ける`;
 
 const HELP: Record<"all" | ModuleId, string> = {
-  all: `diffshape - git の差分を、コードの依存関係（depshape）と DB スキーマ（dbshape）の形で見せます
+  all: `diffshape - git の差分を、ファイルの差分（fileshape）、コードの依存関係（depshape）、DB スキーマ（dbshape）の形で見せます
 
 使い方:
   diffshape [target] [compare-with] [options]
@@ -40,13 +45,27 @@ ${TARGETS}
 options:
 ${COMMON}
 ${SCHEMA}
-  --only <dep|db>    片方のモジュールだけを表示する（depshape / dbshape コマンドと同じ）
+  --only <file|dep|db>
+                     1つのモジュールだけを表示する（fileshape / depshape / dbshape コマンドと同じ）
   -h, --help         このヘルプを表示
 
 例:
   diffshape                       未コミットの変更 vs HEAD
   diffshape . main --merge-base   未コミットの変更を含む現在の状態 vs main からの分岐点
   diffshape @ abc1234             HEAD vs 特定のコミット
+`,
+  file: `fileshape - git の差分を、変更された各ファイルの行の差分として見せます（GitHub の Files changed と同じ形）
+（diffshape のファイルモジュールだけを開きます）
+
+使い方:
+  fileshape [target] [compare-with] [options]
+
+${TARGETS}
+
+options:
+${COMMON}
+  --json             サーバーを起動せず、差分を JSON で標準出力に出す
+  -h, --help         このヘルプを表示
 `,
   dep: `depshape - git の差分による依存関係の変化を、既存の構造と並べて可視化します（Go / TypeScript / JavaScript 対応）
 （diffshape の依存モジュールだけを開きます）
@@ -90,8 +109,8 @@ interface Args extends CompareOptions {
   only?: ModuleId;
 }
 
-export function parseArgs(argv: string[], command: "diffshape" | "depshape" | "dbshape"): Args {
-  const fixed: ModuleId | undefined = command === "depshape" ? "dep" : command === "dbshape" ? "db" : undefined;
+export function parseArgs(argv: string[], command: Command): Args {
+  const fixed = COMMAND_MODULE[command];
   const fail = (msg: string): never => {
     throw new UsageError(msg);
   };
@@ -119,13 +138,13 @@ export function parseArgs(argv: string[], command: "diffshape" | "depshape" | "d
         args.open = false;
         break;
       case "--schema":
-        allowed(a, fixed !== "dep");
+        allowed(a, !fixed || fixed === "db");
         args.schema.push(argv[++i] ?? fail("--schema には glob が必要です"));
         break;
       case "--only": {
         allowed(a, !fixed);
         const v = argv[++i];
-        if (v !== "dep" && v !== "db") fail("--only には dep か db を指定してください");
+        if (v !== "file" && v !== "dep" && v !== "db") fail("--only には file / dep / db のどれかを指定してください");
         args.only = v as ModuleId;
         break;
       }
@@ -154,7 +173,7 @@ export function parseArgs(argv: string[], command: "diffshape" | "depshape" | "d
 
 export class UsageError extends Error {}
 
-export async function run(command: "diffshape" | "depshape" | "dbshape", argv: string[]): Promise<void> {
+export async function run(command: Command, argv: string[]): Promise<void> {
   const fail = (msg: string): never => {
     process.stderr.write(`${command}: ${msg}\n`);
     process.exit(1);
@@ -166,7 +185,7 @@ export async function run(command: "diffshape" | "depshape" | "dbshape", argv: s
     return fail((e as Error).message);
   }
 
-  const all: Analyzer[] = [depAnalyzer, dbAnalyzer({ schema: args.schema })];
+  const all: Analyzer[] = [fileAnalyzer, depAnalyzer, dbAnalyzer({ schema: args.schema })];
   const analyzers = args.only ? all.filter((a) => a.id === args.only) : all;
   const app = new App(process.cwd(), args, analyzers);
   try {

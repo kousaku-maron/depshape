@@ -1,0 +1,876 @@
+/*
+ * fileshape's styles, scoped to the module's root like the other modules. The shared colors come from
+ * @diffshape/ui/base.css; the line colors and the syntax colors follow GitHub.
+ */
+[data-module="file"] {
+& {
+  --line-add: #e6ffec;
+  --line-add-num: #ccffd8;
+  --line-del: #ffebe9;
+  --line-del-num: #ffd7d5;
+  --line-empty: #f6f8fa;
+  --hunk-bg: #ddf4ff;
+  --hunk-text: #57606a;
+  --num: #6e7781;
+  --code-fs: 12px;
+  --row-h: 20px;
+  /* syntax (GitHub light) */
+  --tk-comment: #6e7781;
+  --tk-keyword: #cf222e;
+  --tk-string: #0a3069;
+  --tk-number: #0550ae;
+  --tk-function: #8250df;
+  --tk-type: #953800;
+  --tk-tag: #116329;
+  --tk-attr: #0550ae;
+  --tk-punct: #24292f;
+  --word-add: #abf2bc;
+  --word-del: #ffb3ad;
+  --selected: #fff8c5;
+  --selected-num: #f5e08f;
+  --checker: #eaeef2;
+}
+
+@media (prefers-color-scheme: dark) {
+  & {
+    --line-add: rgba(46, 160, 67, 0.15);
+    --line-add-num: rgba(63, 185, 80, 0.3);
+    --line-del: rgba(248, 81, 73, 0.1);
+    --line-del-num: rgba(248, 81, 73, 0.3);
+    --line-empty: #161b22;
+    --hunk-bg: rgba(56, 139, 253, 0.1);
+    --hunk-text: #8d96a0;
+    --num: #6e7681;
+    --tk-comment: #8b949e;
+    --tk-keyword: #ff7b72;
+    --tk-string: #a5d6ff;
+    --tk-number: #79c0ff;
+    --tk-function: #d2a8ff;
+    --tk-type: #ffa657;
+    --tk-tag: #7ee787;
+    --tk-attr: #79c0ff;
+    --tk-punct: #c9d1d9;
+    --word-add: rgba(46, 160, 67, 0.4);
+    --word-del: rgba(248, 81, 73, 0.4);
+    --selected: rgba(187, 128, 9, 0.18);
+    --selected-num: rgba(187, 128, 9, 0.35);
+    --checker: #21262d;
+  }
+}
+
+.fs-app {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+/* the module bar spans the tree, the divider and the diff */
+.fs-app > .ds-bar {
+  grid-column: 1 / -1;
+}
+
+/* ---- sidebar */
+
+.fs-tree {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-soft);
+}
+
+.fs-tree-head {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.fs-filter {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-h);
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs);
+}
+
+.fs-filter:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.fs-tree-body {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0 16px;
+}
+
+.fs-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding-right: 8px;
+  font-size: var(--fs);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.fs-tree-row:hover {
+  background: var(--bg-hover);
+}
+
+.fs-tree-row.current {
+  background: var(--accent-bg);
+}
+
+.fs-tree-row.dir {
+  color: var(--muted);
+}
+
+.fs-tree-row.reviewed .fs-tree-name {
+  color: var(--muted);
+}
+
+.fs-tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fs-tree-check {
+  margin: 0;
+  accent-color: var(--added);
+  cursor: pointer;
+}
+
+.fs-tree-counts {
+  display: inline-flex;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.fs-tree-counts .added {
+  color: var(--added);
+}
+
+.fs-tree-counts .removed {
+  color: var(--removed);
+}
+
+.fs-tree-empty {
+  padding: 12px;
+}
+
+/* ---- status letter (A / M / D / R) */
+
+.fs-st {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fs-st.small {
+  width: 15px;
+  height: 15px;
+  font-size: 10px;
+}
+
+.fs-st.added {
+  background: var(--added-bg);
+  color: var(--added);
+}
+
+.fs-st.modified,
+.fs-st.renamed {
+  background: var(--modified-bg);
+  color: var(--modified);
+}
+
+.fs-st.removed {
+  background: var(--removed-bg);
+  color: var(--removed);
+}
+
+/* ---- buttons in rows */
+
+.fs-fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.fs-fold svg {
+  transform: rotate(-90deg);
+  transition: transform 0.12s;
+}
+
+.fs-fold.open svg {
+  transform: none;
+}
+
+.fs-fold:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.fs-fold.small {
+  width: 14px;
+  height: 14px;
+}
+
+.fs-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.fs-icon-btn:hover {
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.fs-tree-head .fs-icon-btn {
+  width: var(--control-h);
+  height: var(--control-h);
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+/* ---- the diff */
+
+.fs-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px 40vh;
+}
+
+.fs-empty {
+  padding: 40px;
+  color: var(--muted);
+}
+
+.fs-file {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  /* the sticky header is drawn over the lines, so the rounded corners are kept by the header itself */
+}
+
+.fs-file-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 10px 6px 6px;
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--bg-soft);
+}
+
+.fs-file:not(:has(.fs-file-body)) .fs-file-head {
+  border-bottom: 0;
+  border-radius: var(--radius);
+}
+
+.fs-file-path {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fs-old-path {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.fs-file.reviewed .fs-file-path {
+  color: var(--muted);
+}
+
+.fs-tag {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  line-height: 18px;
+}
+
+.fs-viewed {
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.fs-file.reviewed .fs-viewed {
+  border-color: var(--added);
+  color: var(--added);
+}
+
+.fs-note,
+.fs-folded {
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: var(--fs);
+}
+
+.fs-folded {
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.fs-placeholder {
+  background: repeating-linear-gradient(to bottom, transparent 0 19px, var(--bg-soft) 19px 20px);
+}
+
+.fs-orphans {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.fs-orphans.top {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.fs-comment-where code {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--bg-soft);
+  font-family: var(--font-mono);
+}
+
+/* ---- the lines */
+
+.fs-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-family: var(--font-mono);
+  font-size: var(--code-fs);
+  line-height: var(--row-h);
+}
+
+.fs-col-num {
+  width: 50px;
+}
+
+.fs-col-sign {
+  width: 18px;
+}
+
+.fs-table td {
+  padding: 0;
+  vertical-align: top;
+}
+
+.fs-num {
+  padding: 0 8px !important;
+  color: var(--num);
+  text-align: right;
+  user-select: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.fs-num:not(.empty):hover {
+  color: var(--accent);
+}
+
+/* GitHub's "+" bubble on the line number, to add a comment */
+.fs-num:not(.empty):hover::before {
+  content: "+";
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  width: 16px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.fs-num.empty {
+  cursor: default;
+}
+
+.fs-sign {
+  color: var(--num);
+  text-align: center;
+  user-select: none;
+}
+
+.fs-code {
+  padding-right: 10px !important;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
+/* unified: the whole row is colored */
+.fs-line.add > td {
+  background: var(--line-add);
+}
+
+.fs-line.add > .fs-num {
+  background: var(--line-add-num);
+}
+
+.fs-line.delete > td {
+  background: var(--line-del);
+}
+
+.fs-line.delete > .fs-num {
+  background: var(--line-del-num);
+}
+
+/* split: each side is colored */
+.fs-table.split td.add {
+  background: var(--line-add);
+}
+
+.fs-table.split td.delete {
+  background: var(--line-del);
+}
+
+.fs-table.split td.empty {
+  background: var(--line-empty);
+}
+
+.fs-table.split .fs-num:has(+ .fs-sign.add) {
+  background: var(--line-add-num);
+}
+
+.fs-table.split .fs-num:has(+ .fs-sign.delete) {
+  background: var(--line-del-num);
+}
+
+.fs-table.split .fs-num:has(+ .fs-sign.empty) {
+  background: var(--line-empty);
+}
+
+.fs-table.split .fs-col-half {
+  width: calc(50% - 68px);
+}
+
+/* the boundary between the two sides */
+.fs-table.split td:nth-child(4) {
+  border-left: 1px solid var(--border);
+}
+
+.fs-hunk td {
+  padding: 2px 10px !important;
+  background: var(--hunk-bg);
+  color: var(--hunk-text);
+  font-size: var(--fs-sm);
+}
+
+.fs-hunk-section {
+  color: var(--text);
+}
+
+.fs-thread-row > td {
+  padding: 8px 12px !important;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+  font-family: var(--font-sans);
+}
+
+.fs-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 820px;
+}
+
+.fs-thread .ds-comment + .ds-comment {
+  margin-top: 0;
+}
+
+/* ---- syntax colors (Prism token classes) */
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: var(--tk-comment);
+  font-style: italic;
+}
+
+.token.keyword,
+.token.important,
+.token.atrule,
+.token.rule,
+.token.selector {
+  color: var(--tk-keyword);
+}
+
+.token.string,
+.token.char,
+.token.regex,
+.token.template-string,
+.token.url {
+  color: var(--tk-string);
+}
+
+.token.number,
+.token.boolean,
+.token.constant,
+.token.symbol,
+.token.builtin {
+  color: var(--tk-number);
+}
+
+.token.function,
+.token.function-variable {
+  color: var(--tk-function);
+}
+
+.token.class-name,
+.token.maybe-class-name,
+.token.namespace {
+  color: var(--tk-type);
+}
+
+.token.tag {
+  color: var(--tk-tag);
+}
+
+.token.attr-name,
+.token.property,
+.token.key {
+  color: var(--tk-attr);
+}
+
+.token.operator,
+.token.punctuation {
+  color: var(--tk-punct);
+}
+
+.token.deleted {
+  color: var(--removed);
+}
+
+.token.inserted {
+  color: var(--added);
+}
+
+.token.bold {
+  font-weight: 700;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
+@media (max-width: 700px) {
+  .fs-app {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .fs-tree,
+  .fs-app > .ds-divider {
+    display: none;
+  }
+}
+}
+
+/* ---- added with the expand / word / range / preview features */
+[data-module="file"] {
+/* words that changed inside a changed line */
+.fs-word.old {
+  background: var(--word-del);
+  border-radius: 2px;
+}
+.fs-word.new {
+  background: var(--word-add);
+  border-radius: 2px;
+}
+
+/* lines chosen for a comment (a click, Shift+click or a drag over the numbers) */
+.fs-line.selected > td,
+.fs-table.split td.selected {
+  background: var(--selected);
+}
+.fs-line.selected > .fs-num,
+.fs-num.selected {
+  background: var(--selected-num) !important;
+  color: var(--text);
+}
+.fs-table {
+  user-select: text;
+}
+.fs-num {
+  user-select: none;
+}
+
+/* lines opened around a hunk */
+.fs-line.opened > td {
+  background: var(--bg);
+}
+
+/* the buttons that open lines, at the start of a hunk row */
+.fs-hunk td {
+  padding-left: 0 !important;
+}
+.fs-expanders {
+  display: inline-flex;
+  vertical-align: middle;
+  min-width: 50px;
+  margin-right: 8px;
+}
+.fs-expand {
+  width: 50px;
+  height: 20px;
+  margin: -2px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: 600 13px/20px var(--font-mono);
+  cursor: pointer;
+}
+.fs-expanders .fs-expand + .fs-expand {
+  width: 26px;
+}
+.fs-expand:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.fs-view-seg {
+  flex: none;
+}
+
+/* ---- image preview */
+.fs-images {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+.fs-images.n2 {
+  grid-template-columns: 1fr 1fr;
+}
+.fs-image {
+  margin: 0;
+  min-width: 0;
+}
+.fs-image figcaption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.fs-image-side {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 18px;
+}
+.fs-image-side.old {
+  background: var(--removed-bg);
+  color: var(--removed);
+}
+.fs-image-side.new {
+  background: var(--added-bg);
+  color: var(--added);
+}
+.fs-image-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--bg);
+  background-image: linear-gradient(45deg, var(--checker) 25%, transparent 25%), linear-gradient(-45deg, var(--checker) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker) 75%), linear-gradient(-45deg, transparent 75%, var(--checker) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+.fs-image-frame img {
+  max-width: 100%;
+  max-height: 560px;
+}
+
+/* ---- Markdown preview (GitHub-like) */
+.fs-md-sides {
+  display: grid;
+  gap: 0;
+}
+.fs-md-sides.n2 {
+  grid-template-columns: 1fr 1fr;
+}
+.fs-md-sides.n2 .fs-md-side + .fs-md-side {
+  border-left: 1px solid var(--border);
+}
+.fs-md-side {
+  min-width: 0;
+  padding: 16px 24px;
+}
+.fs-md-side > .fs-image-side {
+  margin-bottom: 8px;
+}
+.fs-md {
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.fs-md > :first-child {
+  margin-top: 0;
+}
+.fs-md h1,
+.fs-md h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+.fs-md h1 {
+  font-size: 1.8em;
+}
+.fs-md h2 {
+  font-size: 1.4em;
+}
+.fs-md h3 {
+  font-size: 1.15em;
+}
+.fs-md h1,
+.fs-md h2,
+.fs-md h3,
+.fs-md h4 {
+  margin: 1.2em 0 0.6em;
+  line-height: 1.25;
+}
+.fs-md p,
+.fs-md ul,
+.fs-md ol,
+.fs-md blockquote,
+.fs-md table,
+.fs-md pre {
+  margin: 0 0 1em;
+}
+.fs-md ul,
+.fs-md ol {
+  padding-left: 2em;
+}
+.fs-md blockquote {
+  padding: 0 1em;
+  border-left: 4px solid var(--border);
+  color: var(--muted);
+}
+.fs-md code {
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background: var(--bg-soft);
+  font-family: var(--font-mono);
+  font-size: 85%;
+}
+.fs-md pre {
+  overflow: auto;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+}
+.fs-md pre code {
+  padding: 0;
+  background: none;
+  font-size: 12px;
+  white-space: pre;
+}
+.fs-md table {
+  display: block;
+  overflow: auto;
+  border-collapse: collapse;
+}
+.fs-md th,
+.fs-md td {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+}
+.fs-md th {
+  background: var(--bg-soft);
+}
+.fs-md img {
+  max-width: 100%;
+}
+.fs-md a,
+.fs-md .fs-md-link {
+  color: var(--accent);
+}
+.fs-md hr {
+  height: 2px;
+  border: 0;
+  background: var(--border);
+}
+.fs-md input[type="checkbox"] {
+  margin-right: 6px;
+}
+
+@media (max-width: 900px) {
+  .fs-images.n2,
+  .fs-md-sides.n2 {
+    grid-template-columns: 1fr;
+  }
+}
+}

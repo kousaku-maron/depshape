@@ -39,3 +39,23 @@ export function useStoredSet(key: string): [Set<string>, Dispatch<SetStateAction
   useEffect(() => saveJSON(key, [...value]), [key, value]);
   return [value, setValue];
 }
+
+/**
+ * A view preference of one module, per browser (not per repository): which view, which toggle.
+ * Saved as "<module>.<key>", e.g. "depshape.mapMode".
+ */
+export function loadPref<T extends string>(module: string, key: string, fallback: T): T {
+  try {
+    return (localStorage.getItem(`${module}.${key}`) as T | null) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function savePref(module: string, key: string, value: string) {
+  try {
+    localStorage.setItem(`${module}.${key}`, value);
+  } catch {
+    /* ignore */
+  }
+}

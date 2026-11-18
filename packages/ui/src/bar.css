@@ -1,0 +1,34 @@
+/* The first row of every module (ModuleBar.tsx). */
+
+.ds-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.ds-bar-counts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ds-bar-label {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.ds-bar-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.ds-bar-spacer {
+  flex: 1;
+}

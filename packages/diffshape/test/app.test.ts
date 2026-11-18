@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dbAnalyzer } from "@diffshape/dbshape";
 import { depAnalyzer } from "@diffshape/depshape";
+import { fileAnalyzer } from "@diffshape/fileshape";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { App } from "../src/app.js";
 import { parseArgs } from "../src/cli.js";
@@ -30,18 +31,22 @@ beforeAll(() => {
   git("commit", "-q", "-m", "base");
   write("app/handler/b.go", 'package handler\n\nimport "example.com/app/usecase"\n');
   write("app/usecase/u.go", "package usecase\n");
+  writeFileSync(join(repo, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 });
 
 afterAll(() => rmSync(repo, { recursive: true, force: true }));
 
 describe("App", () => {
   it("runs every module on one comparison, and keeps a module's error to itself", async () => {
-    const app = new App(repo, {}, [depAnalyzer, dbAnalyzer()]);
+    const app = new App(repo, {}, [fileAnalyzer, depAnalyzer, dbAnalyzer()]);
     const info = await app.refresh();
-    expect(info.modules).toEqual(["dep", "db"]);
+    expect(info.modules).toEqual(["file", "dep", "db"]);
     expect(info.targetLabel).toBe("作業ディレクトリ（未コミットの変更を含む）");
     const dep = await app.result("dep");
     expect("data" in dep && (dep.data as { files: unknown[] }).files.length).toBe(3);
+    // the untracked files, as in the other modules
+    const file = await app.result("file");
+    expect("data" in file && (file.data as { files: { path: string }[] }).files.map((f) => f.path)).toEqual(["app/handler/b.go", "app/usecase/u.go", "logo.png"]);
     // this repository has no SQL files
     const db = await app.result("db");
     expect("error" in db && db.error).toMatch(/SQL ファイルが見つかりません/);
@@ -56,7 +61,7 @@ describe("server", () => {
   let server: Server;
   let url: string;
   beforeAll(async () => {
-    const app = new App(repo, {}, [depAnalyzer, dbAnalyzer()]);
+    const app = new App(repo, {}, [fileAnalyzer, depAnalyzer, dbAnalyzer()]);
     await app.refresh();
     ({ server, url } = await startServer(app, "127.0.0.1", 49777));
   });
@@ -64,10 +69,25 @@ describe("server", () => {
 
   it("answers the comparison and each module", async () => {
     const info = await (await fetch(`${url}/api/info`)).json();
-    expect(info.modules).toEqual(["dep", "db"]);
+    expect(info.modules).toEqual(["file", "dep", "db"]);
     expect(Object.keys(await (await fetch(`${url}/api/module/dep`)).json())).toEqual(["data"]);
     expect(Object.keys(await (await fetch(`${url}/api/module/db`)).json())).toEqual(["error"]);
     expect((await fetch(`${url}/api/info?refresh=1`)).status).toBe(200);
+  });
+
+  it("serves a module's own endpoints: the content of a diff file, and images only", async () => {
+    const res = await fetch(`${url}/api/module/file/content?path=app/handler/b.go&side=new`);
+    expect(await res.json()).toEqual({ lines: ["package handler", "", 'import "example.com/app/usecase"'] });
+    // not in the diff, outside the repository, or not on that side
+    expect((await fetch(`${url}/api/module/file/content?path=go.mod&side=new`)).status).toBe(404);
+    expect((await fetch(`${url}/api/module/file/content?path=../x&side=new`)).status).toBe(400);
+    expect((await fetch(`${url}/api/module/file/content?path=app/handler/b.go&side=old`)).status).toBe(404);
+    const png = await fetch(`${url}/api/module/file/raw?path=logo.png&side=new`);
+    expect(png.headers.get("content-type")).toBe("image/png");
+    expect(png.headers.get("content-security-policy")).toContain("sandbox");
+    expect(Buffer.from(await png.arrayBuffer())).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    expect((await fetch(`${url}/api/module/file/raw?path=go.mod&side=new`)).status).toBe(400);
+    expect((await fetch(`${url}/api/module/nope/x`)).status).toBe(404);
   });
 });
 
@@ -77,12 +97,16 @@ describe("parseArgs", () => {
     expect(a).toMatchObject({ target: ".", base: "main", mergeBase: true, schema: ["db/*.sql"], only: "db", open: false });
   });
 
-  it("fixes the module for depshape / dbshape and keeps their output options", () => {
+  it("fixes the module for fileshape / depshape / dbshape and keeps their output options", () => {
+    expect(parseArgs(["--json"], "fileshape")).toMatchObject({ only: "file", json: true });
+    expect(parseArgs(["--only", "file"], "diffshape")).toMatchObject({ only: "file" });
+    expect(() => parseArgs(["--schema", "x"], "fileshape")).toThrow(/不明なオプション/);
+    expect(() => parseArgs(["--text"], "fileshape")).toThrow(/不明なオプション/);
     expect(parseArgs(["--json"], "depshape")).toMatchObject({ only: "dep", json: true });
     expect(parseArgs(["--text", "--no-color"], "dbshape")).toMatchObject({ only: "db", text: true, color: false });
     expect(() => parseArgs(["--json"], "diffshape")).toThrow(/不明なオプション/);
     expect(() => parseArgs(["--schema", "x"], "depshape")).toThrow(/不明なオプション/);
-    expect(() => parseArgs(["--only", "x"], "diffshape")).toThrow(/dep か db/);
+    expect(() => parseArgs(["--only", "x"], "diffshape")).toThrow(/file \/ dep \/ db/);
     expect(() => parseArgs([".", "main", "x"], "diffshape")).toThrow(/多すぎます/);
   });
 });

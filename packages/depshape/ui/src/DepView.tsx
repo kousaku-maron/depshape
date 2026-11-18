@@ -1,4 +1,4 @@
-import { ChangeCounts, CommentIcon, loadCommentList, loadJSON, saveCommentList, saveJSON, useStoredSet, StatusCounts, type ModuleViewProps } from "@diffshape/ui";
+import { BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CommentIcon, loadCommentList, loadJSON, ModuleBar, ReviewProgress, saveCommentList, saveJSON, useStoredSet, StatusCounts, type ModuleViewProps } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DiffGraph, Edge, FileNode } from "../../src/types";
 import { commentState, formatPrompt, type ReviewComment } from "./comments";
@@ -100,32 +100,22 @@ export function DepView({ data: graph, active, onComments }: ModuleViewProps<Dif
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="summary">
-          <span className="slabel">ファイル</span>
+      <ModuleBar>
+        <BarCounts>
+          <BarLabel>ファイル</BarLabel>
           <StatusCounts stats={counts} unit="ファイル" showZero />
-          <span className="sep" />
-          <span className="slabel">依存</span>
+          <BarSep />
+          <BarLabel>依存</BarLabel>
           <ChangeCounts stats={depCounts} title={DEP_TITLE(depCounts)} showZero />
-        </div>
-        <div className="controls">
-          {targets.size > 0 && (
-            <span className="ds-progress" title="確認済みにした、依存が変わったファイル（依存がまた変わると外れます）">
-              <span>
-                確認済み {reviewed.size} / {targets.size}
-              </span>
-              <span className="ds-progress-bar">
-                <span style={{ width: `${(reviewed.size / targets.size) * 100}%` }} />
-              </span>
-            </span>
-          )}
-          <button className={`ds-btn${sidebarOpen ? " on" : ""}`} onClick={() => setSidebarOpen(!sidebarOpen)} title="コメントのサイドバーを開閉">
+        </BarCounts>
+        <BarSpacer />
+        <ReviewProgress done={reviewed.size} total={targets.size} title="確認済みにした、依存が変わったファイル（依存がまた変わると外れます）" />
+        <button className={`ds-btn${sidebarOpen ? " on" : ""}`} onClick={() => setSidebarOpen(!sidebarOpen)} title="コメントのサイドバーを開閉">
             <CommentIcon size={13} />
             コメント {comments.length}
-            {comments.length > 0 && <span className="muted">（未対応 {openCount}）</span>}
-          </button>
-        </div>
-      </header>
+          {comments.length > 0 && <span className="muted">（未対応 {openCount}）</span>}
+        </button>
+      </ModuleBar>
       <main>
         <DepMap
           model={model}

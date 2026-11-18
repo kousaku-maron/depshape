@@ -1,17 +1,6 @@
-/** Per-browser view preferences (not per repository) */
+import { loadPref as load, savePref as save } from "@diffshape/ui";
 
-export function loadPref<T extends string>(key: string, fallback: T): T {
-  try {
-    return (localStorage.getItem(`depshape.${key}`) as T | null) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
+/** depshape's view preferences, per browser (not per repository) */
+export const loadPref = <T extends string>(key: string, fallback: T) => load<T>("depshape", key, fallback);
 
-export function savePref(key: string, value: string) {
-  try {
-    localStorage.setItem(`depshape.${key}`, value);
-  } catch {
-    /* ignore */
-  }
-}
+export const savePref = (key: string, value: string) => save("depshape", key, value);
