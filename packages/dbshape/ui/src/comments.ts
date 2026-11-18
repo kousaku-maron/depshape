@@ -1,4 +1,5 @@
-import { loadCommentList, newCommentId, promptHeader, saveCommentList } from "@diffshape/ui";
+import { loadCommentList, newCommentId, promptHeader, removeKeysWithPrefix, saveCommentList, type Comparison } from "@diffshape/ui";
+import { comparisonScope } from "./reviewed";
 import type { ColumnView, DbShapeResult, IndexView, SourceLocation, TableChange } from "../../src/model";
 import { schemaFromText } from "../../src/names";
 import { columnParts, indexText } from "./view";
@@ -214,3 +215,6 @@ const PREFIX = "dbshape.comments:";
 export const loadComments = (scope: string) => loadCommentList<ReviewComment>(PREFIX + scope);
 
 export const saveComments = (scope: string, comments: ReviewComment[]) => saveCommentList(PREFIX + scope, comments);
+
+/** Removes the comments of every database in the comparison */
+export const clearComments = (c: Comparison) => removeKeysWithPrefix(PREFIX + comparisonScope(c));

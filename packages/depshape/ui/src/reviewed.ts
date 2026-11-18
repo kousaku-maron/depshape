@@ -1,5 +1,5 @@
-import { hashOf, loadJSON, saveJSON } from "@diffshape/ui";
-import type { DiffGraph, Edge, FileNode } from "../../src/types";
+import { hashOf, loadJSON, removeKey, saveJSON, type Comparison } from "@diffshape/ui";
+import type { Edge, FileNode } from "../../src/types";
 
 /*
  * Files marked "確認済み" (reviewed), like dbshape's tables and fileshape's files. Every changed file
@@ -11,11 +11,16 @@ import type { DiffGraph, Edge, FileNode } from "../../src/types";
 const PREFIX = "depshape.reviewed:";
 
 /** Saved per repository and comparison, like the comments */
-export const reviewScope = (g: DiffGraph) => `${g.repoRoot}|${g.targetLabel}|${g.baseLabel}`;
+export const reviewScope = (g: Comparison) => `${g.repoRoot}|${g.targetLabel}|${g.baseLabel}`;
 
 export const loadReviewed = (scope: string) => loadJSON<Record<string, string>>(PREFIX + scope, {});
 
 export const saveReviewed = (scope: string, marks: Record<string, string>) => saveJSON(PREFIX + scope, marks);
+
+export const clearReviewed = (scope: string) => removeKey(PREFIX + scope);
+
+/** Where the comments of a comparison are saved (the same scope as the marks) */
+export const commentKey = (scope: string) => `depshape.comments:${scope}`;
 
 /** Each changed file, and each file whose local imports appeared / disappeared → a hash of those changes */
 export function reviewTargets(files: FileNode[], edges: Edge[]): Map<string, string> {

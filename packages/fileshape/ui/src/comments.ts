@@ -1,4 +1,4 @@
-import { loadCommentList, newCommentId, promptHeader, saveCommentList } from "@diffshape/ui";
+import { loadCommentList, newCommentId, promptHeader, removeKey, saveCommentList } from "@diffshape/ui";
 import type { DiffFile, FileShapeRun } from "../../src/types";
 import { oldToNew } from "./model";
 
@@ -167,3 +167,5 @@ const PREFIX = "fileshape.comments:";
 export const loadComments = (scope: string) => loadCommentList<ReviewComment>(PREFIX + scope);
 
 export const saveComments = (scope: string, comments: ReviewComment[]) => saveCommentList(PREFIX + scope, comments);
+
+export const clearComments = (scope: string) => removeKey(PREFIX + scope);

@@ -16,6 +16,12 @@ export interface Info {
   /** The commit compared with, or null when it is the staged state (for `git diff <rev>` in an AI prompt) */
   baseRev: string | null;
   modules: string[];
+  /**
+   * Set when the server was started with --clean: an id of this run. The screen clears the comments and
+   * the reviewed marks of this comparison the first time it sees the id, so reloading the page later
+   * keeps what was written since.
+   */
+  clean: string | null;
 }
 
 const message = (e: unknown) => (e instanceof Error ? (e as Error & { stderr?: string }).stderr || e.message : String(e)).trim();
@@ -24,15 +30,20 @@ export class App {
   private sources!: ResolvedSources;
   private results = new Map<string, Promise<ModuleResult>>();
   private jobs: AgentJobs;
+  private cleanId: string | null;
 
   constructor(
     private cwd: string,
     private opts: CompareOptions,
     readonly analyzers: Analyzer[],
-    /** `agents: false` turns the AI review and fix off (a server open to the network) */
-    appOpts: { agents?: boolean } = {},
+    /**
+     * `agents: false` turns the AI review and fix off (a server open to the network); `clean: true` has
+     * the screen start this comparison's review over (--clean)
+     */
+    appOpts: { agents?: boolean; clean?: boolean } = {},
   ) {
     this.jobs = new AgentJobs(appOpts.agents ?? true);
+    this.cleanId = appOpts.clean ? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}` : null;
   }
 
   /** Resolves the comparison (errors like an unknown revision are thrown) and starts every module */
@@ -52,7 +63,7 @@ export class App {
 
   info(): Info {
     const { root, targetLabel, baseLabel, base } = this.sources;
-    return { repoRoot: root, targetLabel, baseLabel, baseRev: base.kind === "rev" ? base.rev : null, modules: this.analyzers.map((a) => a.id) };
+    return { repoRoot: root, targetLabel, baseLabel, baseRev: base.kind === "rev" ? base.rev : null, modules: this.analyzers.map((a) => a.id), clean: this.cleanId };
   }
 
   result(id: string): Promise<ModuleResult> {

@@ -35,7 +35,7 @@ npx @kousaku-maron/diffshape . main --merge-base
 | `diffshape abc1234` | そのコミット単体の変更 |
 | `diffshape staged` / `diffshape working` | ステージ済み / 未ステージの変更のみ |
 
-オプション: `--merge-base`、`--schema <glob>`（スキーマの SQL ファイル。省略時はリポジトリ内のすべての `atlas.hcl` の `src` を読みます。DB が複数あるときは `--schema billing=services/billing/**/*.sql` のように名前を付けます）、`--only <file|dep|db>`、`--port <n>`（デフォルト 4977、使用中なら +1）、`--host`、`--no-open`
+オプション: `--merge-base`、`--schema <glob>`（スキーマの SQL ファイル。省略時はリポジトリ内のすべての `atlas.hcl` の `src` を読みます。DB が複数あるときは `--schema billing=services/billing/**/*.sql` のように名前を付けます）、`--only <file|dep|db>`、`--port <n>`（デフォルト 4977、使用中なら +1）、`--host`、`--no-open`、`--clean`（この比較のレビューコメントと確認済みのマークを消してから開く）
 
 サーバーはデフォルトで `127.0.0.1` だけで待ち受け、`localhost` / `127.0.0.1` 宛て以外のリクエストは拒否します。`--host 0.0.0.0` などを指定すると、同じネットワークの他の端末からリポジトリの構成とスキーマが見えるので注意してください。
 

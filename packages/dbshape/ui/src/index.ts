@@ -2,7 +2,9 @@
 import { DatabaseIcon, type ShapeModule } from "@diffshape/ui";
 import type { DbShapeRun } from "../../src/model";
 import { changeCount } from "../../src/names";
+import { clearComments } from "./comments";
 import { DbView } from "./DbView";
+import { clearReviewed } from "./reviewed";
 import "./styles.css";
 
 export const dbModule: ShapeModule<DbShapeRun> = {
@@ -12,4 +14,8 @@ export const dbModule: ShapeModule<DbShapeRun> = {
   icon: DatabaseIcon,
   View: DbView,
   badge: (run) => run.databases.reduce((n, d) => n + changeCount(d), 0) || undefined,
+  clearReview: (c) => {
+    clearComments(c);
+    clearReviewed(c);
+  },
 };

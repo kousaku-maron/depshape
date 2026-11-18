@@ -29,7 +29,8 @@ const COMMON = `  --merge-base       compare-with と target の分岐点を比�
   --port <n>         ポート番号（デフォルト 4977、使用中なら +1）
   --host <host>      待ち受けホスト（デフォルト 127.0.0.1。0.0.0.0 などにすると同じネットワークから
                      リポジトリの構成が見えるので注意）
-  --no-open          ブラウザを自動で開かない`;
+  --no-open          ブラウザを自動で開かない
+  --clean            この比較のレビューコメントと確認済みのマークを消してから開く`;
 
 const SCHEMA = `  --schema <glob>    スキーマの SQL ファイル（複数指定可）。省略時はリポジトリ内のすべての atlas.hcl の src を読む
                      DB が複数あるときは --schema billing=services/billing/**/*.sql のように名前を付ける`;
@@ -102,6 +103,7 @@ interface Args extends CompareOptions {
   port: number;
   host: string;
   open: boolean;
+  clean: boolean;
   json: boolean;
   text: boolean;
   color: boolean;
@@ -114,7 +116,7 @@ export function parseArgs(argv: string[], command: Command): Args {
   const fail = (msg: string): never => {
     throw new UsageError(msg);
   };
-  const args: Args = { port: 4977, host: "127.0.0.1", open: true, json: false, text: false, color: !!process.stdout.isTTY && !process.env.NO_COLOR, schema: [], only: fixed };
+  const args: Args = { port: 4977, host: "127.0.0.1", open: true, clean: false, json: false, text: false, color: !!process.stdout.isTTY && !process.env.NO_COLOR, schema: [], only: fixed };
   const positional: string[] = [];
   const allowed = (opt: string, ok: boolean) => ok || fail(`不明なオプション: ${opt}`);
   for (let i = 0; i < argv.length; i++) {
@@ -136,6 +138,9 @@ export function parseArgs(argv: string[], command: Command): Args {
         break;
       case "--no-open":
         args.open = false;
+        break;
+      case "--clean":
+        args.clean = true;
         break;
       case "--schema":
         allowed(a, !fixed || fixed === "db");
@@ -187,7 +192,7 @@ export async function run(command: Command, argv: string[]): Promise<void> {
 
   const all: Analyzer[] = [fileAnalyzer, depAnalyzer, dbAnalyzer({ schema: args.schema })];
   const analyzers = args.only ? all.filter((a) => a.id === args.only) : all;
-  const app = new App(process.cwd(), args, analyzers, { agents: isLoopback(args.host) });
+  const app = new App(process.cwd(), args, analyzers, { agents: isLoopback(args.host), clean: args.clean });
   try {
     await app.refresh();
     // output without a server: one module only (checked by parseArgs)

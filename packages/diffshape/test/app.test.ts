@@ -52,6 +52,16 @@ describe("App", () => {
     expect("error" in db && db.error).toMatch(/SQL ファイルが見つかりません/);
   });
 
+  it("gives the run an id with --clean, so the screen clears this comparison once", async () => {
+    expect((await new App(repo, {}, [fileAnalyzer]).refresh()).clean).toBeNull();
+    const app = new App(repo, {}, [fileAnalyzer], { clean: true });
+    const { clean } = await app.refresh();
+    expect(clean).toMatch(/^[0-9a-z]+$/);
+    // the same id on every ask of this run, a reload included
+    expect((await app.refresh()).clean).toBe(clean);
+    expect((await new App(repo, {}, [fileAnalyzer], { clean: true }).refresh()).clean).not.toBe(clean);
+  });
+
   it("throws for a comparison that can not be resolved", async () => {
     await expect(new App(repo, { target: "no-such-rev" }, [depAnalyzer]).refresh()).rejects.toThrow();
   });
@@ -97,6 +107,9 @@ describe("parseArgs", () => {
   it("reads the comparison and options", () => {
     const a = parseArgs([".", "main", "--merge-base", "--schema", "db/*.sql", "--only", "db", "--no-open"], "diffshape");
     expect(a).toMatchObject({ target: ".", base: "main", mergeBase: true, schema: ["db/*.sql"], only: "db", open: false });
+    expect(a.clean).toBe(false);
+    expect(parseArgs(["--clean"], "diffshape").clean).toBe(true);
+    expect(parseArgs(["--clean", "--json"], "fileshape")).toMatchObject({ clean: true, json: true });
   });
 
   it("fixes the module for fileshape / depshape / dbshape and keeps their output options", () => {
