@@ -1,4 +1,4 @@
-import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CheckIcon, CommentCount, CommentIcon, ModuleBar, ReviewProgress, StatusCounts, useWidth, type CommentReport } from "@diffshape/ui";
+import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CheckIcon, CommentCount, CommentIcon, ModuleBar, ReviewProgress, StatusCounts, useWidth, type AiBatch, type AiPlaced, type CommentReport } from "@diffshape/ui";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { schemaFromText } from "../../src/names";
 import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
@@ -8,6 +8,7 @@ import { Details, type Selection } from "./Details";
 import { ErDiagram, type ErDiagramHandle } from "./ErDiagram";
 import type { Mode } from "./erLayout";
 import { clampLayout, DEFAULT_LAYOUT, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
+import { reviewList, toComments } from "./review";
 import { loadReviewed, saveReviewed } from "./reviewed";
 import { changeTitle, hashOf, matchesFilter, tableStats, valueChips, valueTarget, type Status } from "./view";
 
@@ -25,12 +26,18 @@ interface Props {
   /** Shown: the module is shown and this is the selected database */
   active: boolean;
   onComments: (r: CommentReport) => void;
+  /** The latest AI review, or null; the comments whose target starts with `aiPrefix` are for this database */
+  ai: AiBatch | null;
+  /** "" for the only database, "1/", "2/" … when the repository has several */
+  aiPrefix: string;
+  /** Says how many of the review's comments this database kept (`dropped` is counted by the module) */
+  onAi: (placed: AiPlaced) => void;
   /** The database switcher, at the start of the first row (when the repository has several) */
   switcher?: ReactNode;
 }
 
 /** One database: the list, the ER diagram and the detail panel */
-export function DbPane({ data, active, onComments, switcher }: Props) {
+export function DbPane({ data, active, onComments, ai, aiPrefix, onAi, switcher }: Props) {
   const scope = scopeOf(data);
   const [filter, setFilter] = useState("");
   const [mode, setMode] = useState<Mode>("changes");
@@ -56,11 +63,32 @@ export function DbPane({ data, active, onComments, switcher }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [active]);
 
-  // tell the shell how many comments are open, and how to copy them
+  // tell the shell how many comments are open, how to copy them, and what an AI reviewer is told
   useEffect(() => {
     const open = comments.filter((c) => commentState(data, c) !== "resolved").length;
-    onComments({ open, prompt: () => formatPrompt(data, comments, { header: false }).text });
-  }, [data, comments, onComments]);
+    onComments({ open, prompt: () => formatPrompt(data, comments, { header: false }).text, review: () => reviewList(data, aiPrefix) });
+  }, [data, comments, aiPrefix, onComments]);
+
+  // ---- an AI review: the comments that name a part of this database's schema are kept
+  const commentsRef = useRef(comments);
+  commentsRef.current = comments;
+  const aiSeen = useRef(0);
+  const [aiPlaced, setAiPlaced] = useState<AiPlaced | null>(null);
+  useEffect(() => {
+    if (!ai || ai.seq === aiSeen.current) return;
+    aiSeen.current = ai.seq;
+    const added = toComments(ai.items.filter((i) => i.module === "db"), data, aiPrefix, ai.agent);
+    if (added.length) {
+      const next = [...commentsRef.current, ...added];
+      setComments(next);
+      saveComments(scope, next);
+    }
+    setAiPlaced({ seq: ai.seq, placed: added.length, dropped: 0 });
+  }, [ai, data, aiPrefix, scope]);
+  // after the report above, so the module has the new comments when it hears they are placed
+  useEffect(() => {
+    if (aiPlaced) onAi(aiPlaced);
+  }, [aiPlaced, onAi]);
 
   const tables = data.diff.tables;
   const known = useMemo(() => new Set(tables.map((t) => t.name)), [tables]);

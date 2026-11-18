@@ -1,15 +1,16 @@
-import { loadJSON, saveJSON, type CommentReport, type ModuleViewProps } from "@diffshape/ui";
+import { loadJSON, saveJSON, type AiPlaced, type CommentReport, type ModuleViewProps } from "@diffshape/ui";
 import { useEffect, useRef, useState } from "react";
 import type { DbShapeRun } from "../../src/model";
 import { changeCount, schemaFromText } from "../../src/names";
 import { DbPane } from "./DbPane";
+import { REVIEW_RULES } from "./review";
 
 /*
  * The DB module: one pane per database of the repository (a monorepo can have several), switched at
  * the start of the first row. Hidden panes stay mounted, so each keeps its selection and comments box.
  */
 
-export function DbView({ data: run, active, onComments }: ModuleViewProps<DbShapeRun>) {
+export function DbView({ data: run, active, onComments, ai, onAi }: ModuleViewProps<DbShapeRun>) {
   const dbs = run.databases;
   const multi = dbs.length > 1;
   const key = `dbshape.database:${run.repoRoot}`;
@@ -44,8 +45,32 @@ export function DbView({ data: run, active, onComments }: ModuleViewProps<DbShap
             return multi ? `### DB: ${d.database.name}\n\n${text}` : text;
           })
           .join("\n\n"),
+      // what changed in each database, then how to answer (a database without changes is left out)
+      review: () => {
+        const lists = dbs.map((d) => ({ d, text: reports[d.database.id]?.review?.() ?? "" })).filter((x) => x.text);
+        if (lists.length === 0) return "";
+        return [...lists.map(({ d, text }) => (multi ? `### DB: ${d.database.name}\n\n${text}` : text)), REVIEW_RULES].join("\n\n");
+      },
     });
   }, [dbs, reports, multi, onComments]);
+
+  // an AI review's comments: each pane keeps the ones for its database (told apart by the prefix of
+  // the target); once every pane has, the module says how many were kept and how many fit none
+  const prefix = (i: number) => (multi ? `${i + 1}/` : "");
+  const [placed, setPlaced] = useState<Record<string, AiPlaced>>({});
+  const placers = useRef(new Map<string, (p: AiPlaced) => void>());
+  const placer = (id: string) => {
+    let f = placers.current.get(id);
+    if (!f) placers.current.set(id, (f = (p: AiPlaced) => setPlaced((prev) => ({ ...prev, [id]: p }))));
+    return f;
+  };
+  const acked = useRef(0);
+  useEffect(() => {
+    if (!ai || acked.current === ai.seq || !dbs.every((d) => placed[d.database.id]?.seq === ai.seq)) return;
+    acked.current = ai.seq;
+    const kept = dbs.reduce((n, d) => n + placed[d.database.id].placed, 0);
+    onAi({ seq: ai.seq, placed: kept, dropped: ai.items.filter((i) => i.module === "db").length - kept });
+  }, [ai, dbs, placed, onAi]);
 
   if (!current) return <div className="fatal muted">スキーマの SQL ファイルがありません</div>;
 
@@ -73,9 +98,9 @@ export function DbView({ data: run, active, onComments }: ModuleViewProps<DbShap
 
   return (
     <>
-      {dbs.map((d) => (
+      {dbs.map((d, i) => (
         <div key={d.database.id} className="db-pane" hidden={d !== current}>
-          <DbPane data={d} active={active && d === current} onComments={reporter(d.database.id)} switcher={switcher} />
+          <DbPane data={d} active={active && d === current} onComments={reporter(d.database.id)} ai={ai} aiPrefix={prefix(i)} onAi={placer(d.database.id)} switcher={switcher} />
         </div>
       ))}
     </>

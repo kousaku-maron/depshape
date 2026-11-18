@@ -19,6 +19,8 @@ export interface ReviewComment {
   targets: string[];
   body: string;
   createdAt: number;
+  /** The agent whose AI review wrote it ("Claude Code"); a comment of the user has none */
+  ai?: string;
 }
 
 export type TargetState = "open" | "resolved";
@@ -86,7 +88,7 @@ function describeSource(model: Model, tree: Map<string, TreeDir>, id: string): s
   return `${p}/ の変更のないファイル ${n} 個`;
 }
 
-function describeTarget(model: Model, id: string, l: PanelLink | null): string {
+export function describeTarget(model: Model, id: string, l: PanelLink | null): string {
   if (id.startsWith("x:")) return `${id.slice(2)}（外部パッケージ）`;
   if (id.startsWith("t:")) return id.slice(2); // one file of a TS folder
   const dir = id.slice(2);

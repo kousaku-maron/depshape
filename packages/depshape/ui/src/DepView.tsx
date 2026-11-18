@@ -1,15 +1,16 @@
-import { BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CommentIcon, loadCommentList, loadJSON, ModuleBar, ReviewProgress, saveCommentList, saveJSON, useStoredSet, StatusCounts, type ModuleViewProps } from "@diffshape/ui";
+import { BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CommentIcon, loadCommentList, loadJSON, ModuleBar, ReviewProgress, saveCommentList, saveJSON, useStoredSet, StatusCounts, type AiPlaced, type ModuleViewProps } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiffGraph, Edge, FileNode } from "../../src/types";
 import { commentState, formatPrompt, type ReviewComment } from "./comments";
 import { DepMap } from "./DepMap";
 import { ancestorsOf, buildModel, buildTree } from "./model";
 import { loadPref, savePref } from "./prefs";
+import { reviewSection, toComments } from "./review";
 import { loadReviewed, reviewedFiles, reviewScope, reviewTargets, saveReviewed } from "./reviewed";
 import { DEP_TITLE } from "./depTitle";
 import type { MapMode } from "./view";
 
-export function DepView({ data: graph, active, onComments, modules, openIn }: ModuleViewProps<DiffGraph>) {
+export function DepView({ data: graph, active, onComments, modules, openIn, ai, onAi }: ModuleViewProps<DiffGraph>) {
   const repo = graph.repoRoot;
   // what is open / folded / pinned is kept per repository
   const [expanded, setExpanded] = useStoredSet(`depshape.expanded:${repo}`);
@@ -56,11 +57,33 @@ export function DepView({ data: graph, active, onComments, modules, openIn }: Mo
     [commentKey],
   );
 
-  // tell the shell how many comments are open, and how to copy them
+  // tell the shell how many comments are open, how to copy them, and what an AI reviewer is told
   useEffect(() => {
     const open = comments.filter((c) => commentState(model, tree.byPath, c) !== "resolved").length;
-    onComments({ open, prompt: () => formatPrompt(model, tree.byPath, comments, { header: false }).text });
+    onComments({ open, prompt: () => formatPrompt(model, tree.byPath, comments, { header: false }).text, review: () => reviewSection(model, tree.byPath) });
   }, [comments, model, tree, onComments]);
+
+  // ---- an AI review: the comments for this module that point at a dependency or a file it has are
+  // kept (the sidebar opens to show them); the rest is counted as dropped
+  const commentsRef = useRef(comments);
+  commentsRef.current = comments;
+  const aiSeen = useRef(0);
+  const [aiPlaced, setAiPlaced] = useState<AiPlaced | null>(null);
+  useEffect(() => {
+    if (!ai || ai.seq === aiSeen.current) return;
+    aiSeen.current = ai.seq;
+    const items = ai.items.filter((i) => i.module === "dep");
+    const added = toComments(items, model, tree.byPath, ai.agent);
+    if (added.length) {
+      updateComments([...commentsRef.current, ...added]);
+      setSidebarOpen(true);
+    }
+    setAiPlaced({ seq: ai.seq, placed: added.length, dropped: items.length - added.length });
+  }, [ai, model, tree, updateComments]);
+  // after the report above, so the shell has the new comments when it hears they are placed
+  useEffect(() => {
+    if (aiPlaced) onAi(aiPlaced);
+  }, [aiPlaced, onAi]);
 
   const toggleCollapsed = useCallback(
     (dir: string) =>

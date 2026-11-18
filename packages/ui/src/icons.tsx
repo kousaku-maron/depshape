@@ -164,6 +164,15 @@ export function RefreshIcon({ size = 14, ...p }: OutlineProps) {
   );
 }
 
+/** Feather "zap": the AI review and fix */
+export function AiIcon({ size = 14, ...p }: OutlineProps) {
+  return (
+    <Outline size={size} {...p}>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </Outline>
+  );
+}
+
 /** Feather "check" */
 export function CheckIcon({ size = 14, ...p }: OutlineProps) {
   return (

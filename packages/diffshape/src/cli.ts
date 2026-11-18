@@ -1,4 +1,4 @@
-import { openBrowser, type Analyzer, type CompareOptions } from "@diffshape/core";
+import { isLoopback, openBrowser, type Analyzer, type CompareOptions } from "@diffshape/core";
 import { COLORS, dbAnalyzer, formatRunSummary, PLAIN, type DbShapeRun } from "@diffshape/dbshape";
 import { depAnalyzer } from "@diffshape/depshape";
 import { fileAnalyzer } from "@diffshape/fileshape";
@@ -187,7 +187,7 @@ export async function run(command: Command, argv: string[]): Promise<void> {
 
   const all: Analyzer[] = [fileAnalyzer, depAnalyzer, dbAnalyzer({ schema: args.schema })];
   const analyzers = args.only ? all.filter((a) => a.id === args.only) : all;
-  const app = new App(process.cwd(), args, analyzers);
+  const app = new App(process.cwd(), args, analyzers, { agents: isLoopback(args.host) });
   try {
     await app.refresh();
     // output without a server: one module only (checked by parseArgs)

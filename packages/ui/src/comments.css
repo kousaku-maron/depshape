@@ -77,6 +77,17 @@
   color: var(--muted);
 }
 
+/* written by an AI review */
+.ds-comment-ai {
+  border: 1px solid var(--note);
+  border-radius: 4px;
+  padding: 0 5px;
+  color: var(--note);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+}
+
 .ds-spacer {
   flex: 1;
 }

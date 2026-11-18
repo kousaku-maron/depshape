@@ -149,6 +149,130 @@
   }
 }
 
+/* ---- the AI review and fix: a button with a panel under it */
+
+.ai {
+  position: relative;
+}
+
+.ai-pulse {
+  animation: ai-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ai-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.ai-panel {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(520px, calc(100vw - 90px));
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: var(--fs);
+}
+
+.ai-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ai-label {
+  flex: none;
+  width: 56px;
+  color: var(--muted);
+}
+
+/* the model takes the room that is left */
+.ai-row .ai-model {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.ai-error {
+  color: var(--removed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ai-run,
+.ai-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.ai-run-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-log {
+  max-height: 150px;
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.ai-log > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* what the agent said it changed */
+.ai-said {
+  max-height: 180px;
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ai-snapshot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-snapshot code {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
 /* ---- modules */
 
 .shell-body {

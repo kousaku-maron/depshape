@@ -3,6 +3,7 @@ import { addedFile, parseUnifiedDiff } from "../src/diff.js";
 import type { DiffFile, FileShapeRun } from "../src/types.js";
 import { formatPrompt, locate, newComment } from "../ui/src/comments";
 import { highlightFile, highlightLines, languageOf } from "../ui/src/highlight";
+import { fileFor, placeItem, reviewSection } from "../ui/src/review";
 import { reviewedFiles, reviewTargets } from "../ui/src/reviewed";
 import { buildRows, buildTree, changedFolders, changeHash, unchangedFile, expand, filesInTreeOrder, filterTree, gapsOf, markRanges, oldToNew, pairLines, reveal, wordRanges, type Row } from "../ui/src/model";
 
@@ -305,5 +306,67 @@ describe("unchanged files", () => {
     const c = newComment({ path: "a.ts", side: "new", line: 2, code: "two" }, "why?", true);
     expect(locate(f, c)).toEqual({ state: "open", line: 2 });
     expect(formatPrompt(run, [c], { header: false }).text).toContain("a.ts:L2（2 行目（変更なし））");
+  });
+});
+
+describe("AI review", () => {
+  const changed = diff(["@@ -1,4 +1,5 @@", " const a = 1;", "-const b = 2;", "+const b = 3;", "+const c = b;", " ", " export { a };"]);
+  const item = (over: Partial<Parameters<typeof placeItem>[1]>) => ({ side: null, line: null, endLine: null, code: null, ...over });
+
+  it("puts a comment on the lines whose code it quotes, whatever line number it names", () => {
+    // the reviewer is one line off: the code decides
+    expect(placeItem(changed, item({ line: 2, code: "const c = b;" }))).toEqual({ target: { path: "x.ts", side: "new", line: 3, code: "const c = b;" }, exact: true });
+    // several lines, with the indentation dropped and a newline at the end
+    expect(placeItem(changed, item({ line: 9, code: "const b = 3;\n  const c = b;\n" }))?.target).toEqual({ path: "x.ts", side: "new", line: 2, endLine: 3, code: "const b = 3;\nconst c = b;" });
+    // a deleted line is on the base side
+    expect(placeItem(changed, item({ side: "old", line: 2, code: "const b = 2;" }))?.target).toMatchObject({ side: "old", line: 2 });
+  });
+
+  it("takes the nearest place when the same code is there twice", () => {
+    const twice = diff(["@@ -1,3 +1,4 @@", " x();", " y();", "+x();", " z();"]);
+    expect(placeItem(twice, item({ line: 3, code: "x();" }))?.target.line).toBe(3);
+    expect(placeItem(twice, item({ line: 1, code: "x();" }))?.target.line).toBe(1);
+  });
+
+  it("falls back to the named line when the code is not there, and drops what points at nothing", () => {
+    expect(placeItem(changed, item({ line: 3, endLine: 9, code: "something else" }))).toEqual({ target: { path: "x.ts", side: "new", line: 3, endLine: 5, code: "const c = b;\n\nexport { a };" }, exact: false });
+    expect(placeItem(changed, item({ line: 40, code: "nowhere" }))).toBeNull();
+    expect(placeItem(changed, item({ code: "nowhere" }))).toBeNull();
+    expect(placeItem(file("logo.png", { binary: true }), item({ line: 1 }))).toBeNull();
+  });
+
+  it("finds lines outside the hunks once the file's content is read", () => {
+    const far = diff(["@@ -10,3 +10,3 @@", " ten", "-old", "+new", " twelve"]);
+    const content = Array.from({ length: 20 }, (_, i) => (i === 9 ? "ten" : i === 10 ? "new" : i === 11 ? "twelve" : `line ${i + 1}`));
+    expect(placeItem(far, item({ line: 18, code: "line 18" }))).toBeNull();
+    expect(placeItem(far, item({ line: 17, code: "line 18" }), content)).toEqual({ target: { path: "x.ts", side: "new", line: 18, code: "line 18" }, exact: true });
+  });
+
+  it("uses the side a file has: an added or unchanged file has no base side, a removed one no target side", () => {
+    const added = addedFile("new.ts", "one\ntwo\n");
+    expect(placeItem(added, item({ side: "old", line: 2, code: "two" }))?.target).toMatchObject({ side: "new", line: 2 });
+    const plain = unchangedFile("lib.ts", { lines: ["a", "b"] });
+    expect(placeItem(plain, item({ side: "old", line: 1, code: "b" }))?.target).toMatchObject({ path: "lib.ts", side: "new", line: 2 });
+    const removed = file("gone.ts", { status: "removed", chunks: [{ section: "", oldStart: 1, oldLines: 1, newStart: 0, newLines: 0, lines: [{ type: "delete", content: "bye", oldLine: 1 }] }] });
+    expect(placeItem(removed, item({ side: "new", line: 1, code: "bye" }))?.target).toMatchObject({ side: "old", line: 1 });
+  });
+
+  it("finds a renamed file by the path it had", () => {
+    const run: FileShapeRun = { repoRoot: "/r", targetLabel: "t", baseLabel: "b", files: [file("src/new.ts", { status: "renamed", oldPath: "src/old.ts" })] };
+    expect(fileFor(run, "src/old.ts")?.path).toBe("src/new.ts");
+    expect(fileFor(run, "src/none.ts")).toBeUndefined();
+  });
+
+  it("tells the reviewer which files changed and how to point at a line", () => {
+    const run: FileShapeRun = {
+      repoRoot: "/r",
+      targetLabel: "t",
+      baseLabel: "b",
+      files: [file("src/a.ts", { additions: 3, deletions: 1 }), file("src/b.ts", { status: "added", additions: 9 }), file("src/new.ts", { status: "renamed", oldPath: "src/old.ts" }), file("pnpm-lock.yaml", { generated: true }), file("lib.ts", { unchanged: true })],
+    };
+    const text = reviewSection(run);
+    expect(text).toContain("変更されたファイル（3）:\n- M src/a.ts（+3 −1）\n- A src/b.ts（+9 −0）\n- R src/old.ts → src/new.ts\n（生成されたファイル 1 個は対象外）");
+    expect(text).toContain("- code: その行のコードをファイルにあるとおりに");
+    expect(text).not.toContain("lib.ts");
   });
 });

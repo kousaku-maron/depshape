@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -10,10 +11,11 @@ export type Source =
   | { kind: "index" }
   | { kind: "rev"; rev: string };
 
-export async function git(cwd: string, args: string[]): Promise<string> {
+export async function git(cwd: string, args: string[], env?: Record<string, string>): Promise<string> {
   const { stdout } = await execFileAsync("git", args, {
     cwd,
     maxBuffer: 512 * 1024 * 1024,
+    ...(env ? { env: { ...process.env, ...env } } : {}),
   });
   return stdout;
 }
@@ -115,6 +117,51 @@ export async function untrackedFiles(root: string): Promise<{ path: string; size
     }),
   );
   return files.filter((f): f is { path: string; size: number } => f !== null);
+}
+
+/**
+ * The working tree as a git tree: every tracked and untracked file (respecting .gitignore) as it is now.
+ * Built in an index of its own, so neither the working tree nor what is staged changes.
+ */
+export async function worktreeTree(root: string): Promise<string> {
+  const tmp = await mkdtemp(join(tmpdir(), "diffshape-index-"));
+  try {
+    const env = { GIT_INDEX_FILE: join(tmp, "index") };
+    // start from the real index: git then only reads the files that changed since
+    const real = (await git(root, ["rev-parse", "--path-format=absolute", "--git-path", "index"])).trim();
+    await copyFile(real, env.GIT_INDEX_FILE).catch(() => {}); // no index yet: every file is read
+    await git(root, ["add", "-A"], env);
+    return (await git(root, ["write-tree"], env)).trim();
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+}
+
+/** Where the working tree is kept before an agent edits it (a commit that no branch holds) */
+export const SNAPSHOT_REF = "refs/diffshape/before-fix";
+
+/**
+ * Keeps the working tree as it is now under SNAPSHOT_REF and returns that commit, so the edits made
+ * after it can be seen on their own (`diffshape . refs/diffshape/before-fix`) or taken back.
+ */
+export async function snapshotWorktree(root: string): Promise<string> {
+  const tree = await worktreeTree(root);
+  const head = await git(root, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]).then(
+    (s) => s.trim(),
+    () => "", // no commit yet
+  );
+  // the user may have no name set: a snapshot must not fail for that
+  const who = { GIT_AUTHOR_NAME: "diffshape", GIT_AUTHOR_EMAIL: "diffshape@localhost", GIT_COMMITTER_NAME: "diffshape", GIT_COMMITTER_EMAIL: "diffshape@localhost" };
+  const commit = (await git(root, ["commit-tree", tree, ...(head ? ["-p", head] : []), "-m", "diffshape: the working tree before an AI fix"], who)).trim();
+  await git(root, ["update-ref", SNAPSHOT_REF, commit]);
+  return commit;
+}
+
+/** Files of the working tree that differ from a commit (a snapshot), untracked files included */
+export async function changedSince(root: string, commit: string): Promise<string[]> {
+  const tree = await worktreeTree(root);
+  const out = await git(root, ["-c", "core.quotePath=false", "diff", "--name-only", "-z", "--no-renames", commit, tree, "--"]);
+  return out.split("\0").filter(Boolean);
 }
 
 /** One file's bytes on one side, or null when it is not there */
