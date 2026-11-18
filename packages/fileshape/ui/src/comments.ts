@@ -27,6 +27,11 @@ export interface ReviewComment {
   code: string;
   body: string;
   createdAt: number;
+  /**
+   * Written on a file without changes (opened from the tree's "全体" view). That file stays in the list
+   * for the comment; a comment on a change still resolves when its file leaves the diff.
+   */
+  unchanged?: boolean;
 }
 
 export type CommentState = "open" | "updated" | "resolved";
@@ -97,8 +102,18 @@ export interface LineTarget {
   code: string;
 }
 
-export function newComment(t: LineTarget, body: string): ReviewComment {
-  return { id: newCommentId(), path: t.path, side: t.side, line: t.line, ...(t.endLine && t.endLine !== t.line ? { endLine: t.endLine } : {}), code: t.code, body, createdAt: Date.now() };
+export function newComment(t: LineTarget, body: string, unchanged = false): ReviewComment {
+  return {
+    id: newCommentId(),
+    path: t.path,
+    side: t.side,
+    line: t.line,
+    ...(t.endLine && t.endLine !== t.line ? { endLine: t.endLine } : {}),
+    code: t.code,
+    body,
+    createdAt: Date.now(),
+    ...(unchanged ? { unchanged: true } : {}),
+  };
 }
 
 /** "src/a.ts:L12" / "src/a.ts:L12-L15" "(old)" for the base side */
@@ -106,7 +121,11 @@ export const where = (path: string, side: Side, line: number, endLine?: number) 
 
 export const SIDE_LABEL: Record<Side, string> = { old: "変更前", new: "変更後" };
 
-export const linesLabel = (side: Side, line: number, endLine?: number) => `${SIDE_LABEL[side]}の ${endLine && endLine !== line ? `${line}〜${endLine}` : line} 行目`;
+/** "変更後の 12 行目"; a file without changes has one side: "12 行目（変更なし）" */
+export const linesLabel = (side: Side, line: number, endLine?: number, unchanged?: boolean) => {
+  const lines = `${endLine && endLine !== line ? `${line}〜${endLine}` : line} 行目`;
+  return unchanged ? `${lines}（変更なし）` : `${SIDE_LABEL[side]}の ${lines}`;
+};
 
 const codeLines = (label: string, code: string) => {
   const lines = code.split("\n");
@@ -126,7 +145,7 @@ export function formatPrompt(
   list.forEach(({ c, at }, i) => {
     const line = at.line ?? c.line;
     const end = at.line !== undefined ? at.endLine : c.endLine;
-    out.push(`${i + 1}. ${where(c.path, c.side, line, end)}（${linesLabel(c.side, line, end)}）${at.state === "resolved" ? "（解消済み？）" : ""}`);
+    out.push(`${i + 1}. ${where(c.path, c.side, line, end)}（${linesLabel(c.side, line, end, c.unchanged)}）${at.state === "resolved" ? "（解消済み？）" : ""}`);
     if (at.state === "updated") {
       const text = sideText(fileOf(run, c.path)!, c.side, opts.contents?.get(c.path));
       const now = Array.from({ length: lengthOf(c) }, (_, k) => text.get(line + k) ?? "").join("\n");

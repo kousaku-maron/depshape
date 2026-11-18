@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { linkKey } from "./comments";
-import { EyeIcon, PinIcon } from "@diffshape/ui";
+import { EyeIcon, FileIcon, PinIcon } from "@diffshape/ui";
 import type { Model, TreeDir } from "./model";
 import { fitPath as fitPathWith } from "./labels";
 import { hideKey, isHidden, unhide, type Column } from "./hide";
@@ -107,9 +107,17 @@ export interface DepPanelProps {
   /** rows whose lines are set aside for now (see hide.ts): faded, their links not drawn */
   hidden: ReadonlySet<string>;
   onHiddenChange: (next: Set<string>) => void;
+  /** what opening a file in the file module is called ("差分を開く" / "ファイルを開く"), or undefined when it can not be opened */
+  openLabel: (path: string) => string | undefined;
+  /** opens a file in the file module; null when that module is not in this run */
+  onOpenFile: ((path: string) => void) | null;
 }
 
 const additive = (e: MouseEvent) => e.metaKey || e.ctrlKey || e.shiftKey;
+/** The second click of a double-click: it does not select again (that would undo the first click's selection) */
+const repeat = (e: MouseEvent) => e.detail > 1;
+/** For the buttons inside a row: their double-click is not the row's */
+const stopDouble = (e: MouseEvent) => e.stopPropagation();
 
 export function DepPanel(props: DepPanelProps) {
   const { model, tree, pins, hovered, targetOpen, sourceOpen } = props;
@@ -145,7 +153,7 @@ export function DepPanel(props: DepPanelProps) {
   }, [data, props.hidden]);
   const links = useMemo(() => data.links.filter((l) => !hid.S.has(l.from) && !hid.T.has(l.to)), [data, hid]);
   const inLinks = useMemo(() => data.inLinks.filter((l) => !hid.I.has(l.from) && !hid.S.has(l.to)), [data, hid]);
-  const [menu, setMenu] = useState<{ x: number; y: number; col: Column; id: string } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; col: Column; id: string; file?: string; openAs?: string } | null>(null);
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
@@ -161,10 +169,17 @@ export function DepPanel(props: DepPanelProps) {
       window.removeEventListener("blur", close);
     };
   }, [menu]);
-  const openMenu = (col: Column, id: string) => (e: MouseEvent) => {
+  /** A file row that opens in the file module, or undefined */
+  const openable = (path: string | undefined) => (path && props.openLabel(path) ? path : undefined);
+  const openMenu = (col: Column, id: string, file?: string) => (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setMenu({ x: e.clientX, y: e.clientY, col, id });
+    setMenu({ x: e.clientX, y: e.clientY, col, id, file, openAs: file && props.openLabel(file) });
+  };
+  /** The tooltip lines about opening a file row */
+  const openHints = (file: string | undefined) => {
+    const as = file && props.openLabel(file);
+    return { dbl: as ? `\nダブルクリックで${as === "差分を開く" ? "このファイルの差分" : "このファイル"}を開く` : "", menu: as ? `「${as}」、` : "" };
   };
 
   /** links leaving a source row (an opened folder's leave the rows under it) */
@@ -347,16 +362,19 @@ export function DepPanel(props: DepPanelProps) {
             ? `${abs(t.dir)}/ 直下の、import しているファイル`
             : `${abs(t.dir)}${t.self ? "\nこのパッケージ（フォルダ直下のファイル）だけ。下のフォルダは含まない" : ""}`;
     const clickWhat = isDep ? "ここから出る依存" : "ここに入る依存";
+    const file = openable(t.file);
+    const hints = openHints(file);
     return (
       <g
         key={t.id}
         className={`pnode target ${t.kind}${isDep ? " dependent" : ""}${(isDep ? hid.I : hid.T).has(t.id) ? " hid" : ""}${t.self ? " self" : ""}${t.open ? " open" : ""}${allNew ? " new" : ""}${pinned ? " pinned" : ""}${fileStatus && fileStatus !== "unchanged" ? ` f-${fileStatus}` : ""}`}
         onMouseEnter={() => setFocus(t.id)}
         onMouseLeave={() => setFocus(null)}
-        onClick={(e) => props.onSelectKeys(keys(ls), additive(e))}
-        onContextMenu={openMenu(isDep ? "I" : "T", t.id)}
+        onClick={(e) => !repeat(e) && props.onSelectKeys(keys(ls), additive(e))}
+        onDoubleClick={file ? () => props.onOpenFile?.(file) : undefined}
+        onContextMenu={openMenu(isDep ? "I" : "T", t.id, file)}
       >
-        <title>{`${what}\nクリックで${clickWhat}をすべて選択${openHint}\n右クリックで線を非表示 / 表示`}</title>
+        <title>{`${what}\nクリックで${clickWhat}をすべて選択${openHint}${hints.dbl}\n右クリックで${hints.menu}線を非表示 / 表示`}</title>
         <rect x={x} y={y} width={w} height={ROW_H} rx={6} />
         {t.canOpen && (
           <g
@@ -365,6 +383,7 @@ export function DepPanel(props: DepPanelProps) {
               e.stopPropagation();
               props.onToggleTarget(t.id, !t.open);
             }}
+            onDoubleClick={stopDouble}
           >
             <title>{t.open ? "まとめる" : `開いて、${openWhat}を表示`}</title>
             <rect x={x} y={y} width={10 + chev} height={ROW_H} />
@@ -387,6 +406,7 @@ export function DepPanel(props: DepPanelProps) {
               e.stopPropagation();
               props.onTogglePin(pinId);
             }}
+            onDoubleClick={stopDouble}
           >
             <title>{pinned ? "ピン留め中（クリックでピン留めを外す）" : "ピン留めして、この先の依存をたどる"}</title>
             <rect x={x + w - 26} y={y + 4} width={20} height={ROW_H - 8} rx={4} />
@@ -526,6 +546,8 @@ export function DepPanel(props: DepPanelProps) {
               const clickKeys = keys([...outgoing(s.id), ...(box ? inLinks.filter((l) => l.to === s.id) : [])]);
               const splitWhat = box ? "ファイルごと" : "中のフォルダ・ファイルごと";
               const openHint = s.canOpen ? (s.open ? "\n▾ でまとめる" : `\n▸ で開いて、${splitWhat}に分ける`) : "";
+              const file = s.kind === "file" ? openable(s.path) : undefined;
+              const hints = openHints(file);
               return (
                 <g
                   key={s.id}
@@ -533,10 +555,11 @@ export function DepPanel(props: DepPanelProps) {
                   className={`pnode source ${s.kind} ${s.status}${hid.S.has(s.id) ? " hid" : ""}${s.pinned ? " pinned" : " temp"}${s.depth ? " child" : ""}${s.open ? " open" : ""}`}
                   onMouseEnter={() => setFocus(s.id)}
                   onMouseLeave={() => setFocus(null)}
-                  onClick={(e) => props.onSelectKeys(clickKeys, additive(e))}
-                  onContextMenu={openMenu("S", s.id)}
+                  onClick={(e) => !repeat(e) && props.onSelectKeys(clickKeys, additive(e))}
+                  onDoubleClick={file ? () => props.onOpenFile?.(file) : undefined}
+                  onContextMenu={openMenu("S", s.id, file)}
                 >
-                  <title>{`${abs(s.path)}${what}\n依存先 ${n}\nクリックで${box ? "この箱に出入りする" : "ここから出る"}依存をすべて選択${openHint}\n右クリックで線を非表示 / 表示`}</title>
+                  <title>{`${abs(s.path)}${what}\n依存先 ${n}\nクリックで${box ? "この箱に出入りする" : "ここから出る"}依存をすべて選択${openHint}${hints.dbl}\n右クリックで${hints.menu}線を非表示 / 表示`}</title>
                   <rect x={x} y={y} width={w} height={ROW_H} rx={6} />
                   {s.canOpen && (
                     <g
@@ -545,6 +568,7 @@ export function DepPanel(props: DepPanelProps) {
                         e.stopPropagation();
                         props.onToggleSource(s.id, !s.open);
                       }}
+                      onDoubleClick={stopDouble}
                     >
                       <title>{s.open ? "まとめる" : `開いて、${splitWhat}に分ける`}</title>
                       <rect x={x} y={y} width={10 + srcChevW} height={ROW_H} />
@@ -566,6 +590,7 @@ export function DepPanel(props: DepPanelProps) {
                         e.stopPropagation();
                         props.onTogglePin(s.id);
                       }}
+                      onDoubleClick={stopDouble}
                     >
                       <title>ピン留め中（クリックでピン留めを外す）</title>
                       <rect x={srcX0 + srcW - 26} y={y + 4} width={20} height={ROW_H - 8} rx={4} />
@@ -588,8 +613,24 @@ export function DepPanel(props: DepPanelProps) {
               props.onHiddenChange(next);
               setMenu(null);
             };
+            const file = menu.file;
             return (
               <>
+                {file && (
+                  <>
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        props.onOpenFile?.(file);
+                        setMenu(null);
+                      }}
+                    >
+                      <FileIcon size={14} />
+                      {menu.openAs}
+                    </button>
+                    <div className="panel-menu-sep" role="separator" />
+                  </>
+                )}
                 {rowHidden ? (
                   <button role="menuitem" onClick={act(unhide(props.hidden, menu.col, menu.id))}>
                     <EyeIcon on />

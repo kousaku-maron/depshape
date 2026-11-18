@@ -1,5 +1,5 @@
 import { hashOf } from "@diffshape/ui";
-import type { DiffChunk, DiffFile, DiffLine } from "../../src/types";
+import type { DiffChunk, DiffFile, DiffLine, PlainFile } from "../../src/types";
 
 /*
  * What the screen derives from the diff: the file tree of the sidebar (folders with one child folder
@@ -12,32 +12,47 @@ export interface TreeNode {
   /** Full path ("" for the root) */
   path: string;
   children: TreeNode[];
+  /** A file shown in the list (a change, or an unchanged file opened from the tree) */
   file?: DiffFile;
+  /** A file of the repository that is not shown (the tree's "全体" view): selecting it opens it */
+  plain?: boolean;
 }
 
-export function buildTree(files: DiffFile[]): TreeNode {
+const isLeaf = (n: TreeNode) => !!n.file || !!n.plain;
+
+/**
+ * The tree of the shown files, plus (the "全体" view) every other path of the repository as a plain
+ * file. A whole repository has many files: each folder keeps its children by name while it is built.
+ */
+export function buildTree(files: DiffFile[], plain: readonly string[] = []): TreeNode {
   const root: TreeNode = { name: "", path: "", children: [] };
-  for (const file of files) {
-    const parts = file.path.split("/");
+  const folders = new Map<TreeNode, Map<string, TreeNode>>([[root, new Map()]]);
+  const shown = new Set(files.map((f) => f.path));
+  const add = (path: string, leaf: Pick<TreeNode, "file" | "plain">) => {
+    const parts = path.split("/");
     let node = root;
-    parts.forEach((part, i) => {
-      const last = i === parts.length - 1;
-      const path = parts.slice(0, i + 1).join("/");
-      let child = node.children.find((c) => c.name === part && !c.file === !last);
+    for (let i = 0; i < parts.length - 1; i++) {
+      const kids = folders.get(node)!;
+      let child = kids.get(parts[i]);
       if (!child) {
-        child = { name: part, path, children: [], ...(last ? { file } : {}) };
+        child = { name: parts[i], path: parts.slice(0, i + 1).join("/"), children: [] };
         node.children.push(child);
+        kids.set(parts[i], child);
+        folders.set(child, new Map());
       }
       node = child;
-    });
-  }
+    }
+    node.children.push({ name: parts[parts.length - 1], path, children: [], ...leaf });
+  };
+  for (const file of files) add(file.path, { file });
+  for (const path of plain) if (!shown.has(path)) add(path, { plain: true });
   return sortTree(joinSingleFolders(root));
 }
 
 /** "src" with only "app" inside becomes one row "src/app" */
 function joinSingleFolders(node: TreeNode): TreeNode {
   let n = { ...node, children: node.children.map(joinSingleFolders) };
-  while (n.path !== "" && !n.file && n.children.length === 1 && !n.children[0].file) {
+  while (n.path !== "" && !isLeaf(n) && n.children.length === 1 && !isLeaf(n.children[0])) {
     const only = n.children[0];
     n = { ...only, name: `${n.name}/${only.name}` };
   }
@@ -46,7 +61,7 @@ function joinSingleFolders(node: TreeNode): TreeNode {
 
 /** Folders first, then files, each by name (the order GitHub shows) */
 function sortTree(node: TreeNode): TreeNode {
-  const children = node.children.map(sortTree).sort((a, b) => (!a.file !== !b.file ? (a.file ? 1 : -1) : a.name.localeCompare(b.name)));
+  const children = node.children.map(sortTree).sort((a, b) => (isLeaf(a) !== isLeaf(b) ? (isLeaf(a) ? 1 : -1) : a.name.localeCompare(b.name)));
   return { ...node, children };
 }
 
@@ -56,7 +71,21 @@ export function filesInTreeOrder(node: TreeNode): DiffFile[] {
 }
 
 export function folderPaths(node: TreeNode): string[] {
-  return node.file ? [] : [...(node.path ? [node.path] : []), ...node.children.flatMap(folderPaths)];
+  return isLeaf(node) ? [] : [...(node.path ? [node.path] : []), ...node.children.flatMap(folderPaths)];
+}
+
+/** Folders with a changed file somewhere inside (the "全体" view opens these at first) */
+export function changedFolders(node: TreeNode): Set<string> {
+  const out = new Set<string>();
+  const walk = (n: TreeNode): boolean => {
+    if (isLeaf(n)) return !!n.file && !n.file.unchanged;
+    let any = false;
+    for (const c of n.children) if (walk(c)) any = true;
+    if (any && n.path) out.add(n.path);
+    return any;
+  };
+  walk(node);
+  return out;
 }
 
 /** The tree with only the files whose path contains `query` (case-insensitive) */
@@ -64,6 +93,7 @@ export function filterTree(node: TreeNode, query: string): TreeNode | null {
   const q = query.trim().toLowerCase();
   if (!q) return node;
   if (node.file) return node.file.path.toLowerCase().includes(q) || (node.file.oldPath ?? "").toLowerCase().includes(q) ? node : null;
+  if (node.plain) return node.path.toLowerCase().includes(q) ? node : null;
   const children = node.children.map((c) => filterTree(c, q)).filter((c): c is TreeNode => c !== null);
   return children.length || node.path === "" ? { ...node, children } : null;
 }
@@ -87,7 +117,22 @@ const first = (start: number, count: number) => (count === 0 ? start + 1 : start
 const last = (start: number, count: number) => (count === 0 ? start : start + count - 1);
 
 /** Whether the file has both sides, so there are lines around its hunks to open */
-export const canExpand = (f: DiffFile) => f.status !== "added" && f.status !== "removed" && !f.binary && !f.large && f.chunks.length > 0;
+export const canExpand = (f: DiffFile) => !f.unchanged && f.status !== "added" && f.status !== "removed" && !f.binary && !f.large && f.chunks.length > 0;
+
+/**
+ * An unchanged file to show in the list: every line as context, in one hunk that starts at line 1.
+ * `read` is undefined while its lines are being read.
+ */
+export function unchangedFile(path: string, read: PlainFile | undefined): DiffFile {
+  const base = { path, status: "modified" as const, additions: 0, deletions: 0, unchanged: true };
+  if (!read) return { ...base, chunks: [], loading: true };
+  if (read.binary) return { ...base, chunks: [], binary: true };
+  if (read.large || !read.lines) return { ...base, chunks: [], large: true };
+  const n = read.lines.length;
+  if (n === 0) return { ...base, chunks: [] };
+  const lines: DiffLine[] = read.lines.map((content, i) => ({ type: "normal", content, oldLine: i + 1, newLine: i + 1 }));
+  return { ...base, chunks: [{ section: "", oldStart: 1, oldLines: n, newStart: 1, newLines: n, lines }] };
+}
 
 export function gapsOf(file: DiffFile, total?: number): Gap[] {
   if (!canExpand(file)) return [];
@@ -125,6 +170,8 @@ export type Row =
  * content). A gap that is fully opened disappears, and its hunks read as one.
  */
 export function buildRows(file: DiffFile, content: string[] | undefined, exp: Expansion): Row[] {
+  // an unchanged file is its lines, with no hunk header above them
+  if (file.unchanged) return file.chunks.flatMap((c) => c.lines.map((line): Row => ({ kind: "line", line })));
   const rows: Row[] = [];
   const gaps = gapsOf(file, content?.length);
   const opened = (g: Gap, a: number, b: number) => {

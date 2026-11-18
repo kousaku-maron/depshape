@@ -702,4 +702,12 @@ main {
 .panel-menu .eye {
   color: var(--muted);
 }
+.panel-menu button svg {
+  flex: none;
+}
+.panel-menu-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
 }

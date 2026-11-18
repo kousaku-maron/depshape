@@ -9,7 +9,7 @@ import { loadReviewed, reviewedFiles, reviewScope, reviewTargets, saveReviewed }
 import { DEP_TITLE } from "./depTitle";
 import type { MapMode } from "./view";
 
-export function DepView({ data: graph, active, onComments }: ModuleViewProps<DiffGraph>) {
+export function DepView({ data: graph, active, onComments, modules, openIn }: ModuleViewProps<DiffGraph>) {
   const repo = graph.repoRoot;
   // what is open / revealed / folded / pinned is kept per repository
   const [expanded, setExpanded] = useStoredSet(`depshape.expanded:${repo}`);
@@ -94,6 +94,19 @@ export function DepView({ data: graph, active, onComments }: ModuleViewProps<Dif
     [mapMode, setExpanded, setRevealed],
   );
 
+  // every file opens in the file module (when that module is in this run): a changed one at its line
+  // diff, an unchanged one as its whole content
+  const hasFileModule = modules.includes("file");
+  const openLabel = useCallback(
+    (path: string) => {
+      const f = model.fileByPath.get(path);
+      if (!hasFileModule || !f) return undefined;
+      return f.status === "unchanged" ? "ファイルを開く" : "差分を開く";
+    },
+    [model, hasFileModule],
+  );
+  const onOpenFile = useMemo(() => (hasFileModule ? (path: string) => openIn("file", path) : null), [hasFileModule, openIn]);
+
   const counts = countFiles(model.graph.files);
   const openCount = comments.filter((c) => commentState(model, tree.byPath, c) !== "resolved").length;
   const depCounts = countDeps(model.graph.edges);
@@ -149,6 +162,8 @@ export function DepView({ data: graph, active, onComments }: ModuleViewProps<Dif
           sidebarOpen={sidebarOpen}
           onSidebarOpen={setSidebarOpen}
           active={active}
+          openLabel={openLabel}
+          onOpenFile={onOpenFile}
         />
       </main>
     </div>

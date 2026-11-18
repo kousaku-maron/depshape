@@ -43,6 +43,21 @@ export interface DiffFile {
   generated?: boolean;
   /** Only the file mode changed, e.g. "100644 → 100755" */
   modeChange?: string;
+  /**
+   * Not a change: a file the screen opened from the tree's "全体" view, every line as context.
+   * The server never sends it; the screen makes it from a PlainFile.
+   */
+  unchanged?: boolean;
+  /** An unchanged file whose lines are still being read (screen only) */
+  loading?: boolean;
+}
+
+/** A file that is not in the diff, read for the tree's "全体" view */
+export interface PlainFile {
+  lines?: string[];
+  binary?: boolean;
+  /** Too large to show its lines */
+  large?: boolean;
 }
 
 export interface FileShapeRun {

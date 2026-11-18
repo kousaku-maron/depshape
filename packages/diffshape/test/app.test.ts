@@ -75,11 +75,13 @@ describe("server", () => {
     expect((await fetch(`${url}/api/info?refresh=1`)).status).toBe(200);
   });
 
-  it("serves a module's own endpoints: the content of a diff file, and images only", async () => {
+  it("serves a module's own endpoints: the content of a repository file, and images only", async () => {
     const res = await fetch(`${url}/api/module/file/content?path=app/handler/b.go&side=new`);
     expect(await res.json()).toEqual({ lines: ["package handler", "", 'import "example.com/app/usecase"'] });
-    // not in the diff, outside the repository, or not on that side
-    expect((await fetch(`${url}/api/module/file/content?path=go.mod&side=new`)).status).toBe(404);
+    // an unchanged file of the repository is served too (the tree's "全体" view)
+    expect((await fetch(`${url}/api/module/file/content?path=go.mod&side=new`)).status).toBe(200);
+    // not in the repository, outside it, or not on that side
+    expect((await fetch(`${url}/api/module/file/content?path=nope.go&side=new`)).status).toBe(404);
     expect((await fetch(`${url}/api/module/file/content?path=../x&side=new`)).status).toBe(400);
     expect((await fetch(`${url}/api/module/file/content?path=app/handler/b.go&side=old`)).status).toBe(404);
     const png = await fetch(`${url}/api/module/file/raw?path=logo.png&side=new`);

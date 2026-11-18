@@ -53,6 +53,8 @@ interface Props {
   onExpand: (path: string, gap: Gap, dir: "up" | "down" | "all") => void;
   onView: (path: string, view: FileViewKind) => void;
   register: (path: string, el: HTMLElement | null) => void;
+  /** An unchanged file opened from the tree: takes it out of the list (undefined while comments keep it there) */
+  onClose?: (path: string) => void;
 }
 
 export const FileBlock = memo(function FileBlock(p: Props) {
@@ -78,17 +80,8 @@ export const FileBlock = memo(function FileBlock(p: Props) {
     window.setTimeout(() => setCopied(false), 1400);
   };
 
-  const note = file.binary
-    ? "バイナリファイルのため、行の差分はありません"
-    : file.large
-      ? "大きすぎるため、行の差分を表示していません"
-      : file.chunks.length === 0
-        ? file.modeChange
-          ? `ファイルのモードだけが変わりました（${file.modeChange}）`
-          : file.status === "renamed"
-            ? "名前だけが変わりました（内容の変更はありません）"
-            : "空のファイルです"
-        : undefined;
+  const plain = !!file.unchanged;
+  const note = plain ? plainNote(file) : diffNote(file);
 
   const body = () => {
     if (view === "preview") {
@@ -97,18 +90,22 @@ export const FileBlock = memo(function FileBlock(p: Props) {
     }
     if (note) return <div className="fs-note">{note}</div>;
     if (!near) return <div className="fs-placeholder" style={{ height: (lines + file.chunks.length) * 20 }} />;
-    return <DiffTable file={file} mode={p.mode} rows={rows} tokens={tokens} byLine={p.byLine} onExpand={(g, dir) => p.onExpand(file.path, g, dir)} />;
+    return <DiffTable file={file} mode={plain ? "unified" : p.mode} rows={rows} tokens={tokens} byLine={p.byLine} onExpand={(g, dir) => p.onExpand(file.path, g, dir)} />;
   };
 
   return (
-    <section ref={ref} className={`fs-file${p.reviewed ? " reviewed" : ""}`} data-path={file.path}>
+    <section ref={ref} className={`fs-file${p.reviewed ? " reviewed" : ""}${plain ? " unchanged" : ""}`} data-path={file.path}>
       <header className="fs-file-head">
         <button className={`fs-fold${p.open ? " open" : ""}`} onClick={() => p.onToggle(file.path)} aria-label={p.open ? "折りたたむ" : "開く"} aria-expanded={p.open}>
           <ChevronIcon size={14} />
         </button>
-        <span className={`fs-st ${file.status}`} title={STATUS_TEXT[file.status]}>
-          {STATUS_MARK[file.status]}
-        </span>
+        {plain ? (
+          <span className="fs-st unchanged" title="変更なし" />
+        ) : (
+          <span className={`fs-st ${file.status}`} title={STATUS_TEXT[file.status]}>
+            {STATUS_MARK[file.status]}
+          </span>
+        )}
         <span className="fs-file-path" title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path} onClick={() => p.onToggle(file.path)}>
           {file.oldPath && (
             <>
@@ -122,6 +119,11 @@ export const FileBlock = memo(function FileBlock(p: Props) {
           <CopyIcon size={13} />
         </button>
         {file.generated && <span className="fs-tag" title="ロックファイルや生成されたコード（最初は折りたたんでいます）">生成</span>}
+        {plain && (
+          <span className="fs-tag" title="ツリーの「全体」から開いた、変更していないファイル">
+            変更なし
+          </span>
+        )}
         <span className="ds-spacer" />
         {preview && !(isImage(file.path) && file.binary) && (
           <span className="ds-seg fs-view-seg" role="radiogroup" aria-label="表示">
@@ -138,11 +140,21 @@ export const FileBlock = memo(function FileBlock(p: Props) {
           </span>
         )}
         {p.commentCount > 0 && <CommentCount n={p.commentCount} title={`コメント ${p.commentCount}`} />}
-        <ChangeCounts stats={{ added: file.additions, removed: file.deletions }} title={`追加 ${file.additions} 行・削除 ${file.deletions} 行`} />
-        <label className="ds-check fs-viewed" title="確認済みにすると折りたたみます（このファイルがまた変わると外れます）">
-          <input type="checkbox" checked={p.reviewed} onChange={(e) => p.onReviewed(file.path, e.target.checked)} />
-          確認済み
-        </label>
+        {plain ? (
+          p.onClose && (
+            <button className="ds-btn" onClick={() => p.onClose!(file.path)} title="一覧から外す（ツリーの「全体」からまた開けます）">
+              閉じる
+            </button>
+          )
+        ) : (
+          <>
+            <ChangeCounts stats={{ added: file.additions, removed: file.deletions }} title={`追加 ${file.additions} 行・削除 ${file.deletions} 行`} />
+            <label className="ds-check fs-viewed" title="確認済みにすると折りたたみます（このファイルがまた変わると外れます）">
+              <input type="checkbox" checked={p.reviewed} onChange={(e) => p.onReviewed(file.path, e.target.checked)} />
+              確認済み
+            </label>
+          </>
+        )}
       </header>
       {p.open && (
         <div className="fs-file-body">
@@ -168,6 +180,23 @@ export const FileBlock = memo(function FileBlock(p: Props) {
     </section>
   );
 });
+
+/** Why a changed file shows no lines, or undefined */
+function diffNote(file: DiffFile): string | undefined {
+  if (file.binary) return "バイナリファイルのため、行の差分はありません";
+  if (file.large) return "大きすぎるため、行の差分を表示していません";
+  if (file.chunks.length > 0) return undefined;
+  if (file.modeChange) return `ファイルのモードだけが変わりました（${file.modeChange}）`;
+  return file.status === "renamed" ? "名前だけが変わりました（内容の変更はありません）" : "空のファイルです";
+}
+
+/** Why an unchanged file shows no lines, or undefined */
+function plainNote(file: DiffFile): string | undefined {
+  if (file.loading) return "読み込み中…";
+  if (file.binary) return "バイナリファイルです";
+  if (file.large) return "大きすぎるため、内容を表示していません";
+  return file.chunks.length === 0 ? "空のファイルです" : undefined;
+}
 
 /** Becomes true once the element comes within a screen or so of the visible area, and stays true */
 function useNear(ref: RefObject<HTMLElement>, root: HTMLElement | null): boolean {
