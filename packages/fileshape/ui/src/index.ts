@@ -1,7 +1,9 @@
 // The screen side of the fileshape module.
 import { FileIcon, type ShapeModule } from "@diffshape/ui";
 import type { FileShapeRun } from "../../src/types";
+import { clearComments } from "./comments";
 import { FileView } from "./FileView";
+import { clearReviewed, reviewScope } from "./reviewed";
 import "./styles.css";
 
 export const fileModule: ShapeModule<FileShapeRun> = {
@@ -11,4 +13,8 @@ export const fileModule: ShapeModule<FileShapeRun> = {
   icon: FileIcon,
   View: FileView,
   badge: (r) => r.files.length || undefined,
+  clearReview: (c) => {
+    clearComments(reviewScope(c));
+    clearReviewed(reviewScope(c));
+  },
 };

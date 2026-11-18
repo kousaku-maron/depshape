@@ -1,5 +1,5 @@
-import { loadJSON, saveJSON } from "@diffshape/ui";
-import type { DiffFile, FileShapeRun } from "../../src/types";
+import { loadJSON, removeKey, saveJSON, type Comparison } from "@diffshape/ui";
+import type { DiffFile } from "../../src/types";
 import { changeHash } from "./model";
 
 /*
@@ -10,11 +10,13 @@ import { changeHash } from "./model";
 const PREFIX = "fileshape.reviewed:";
 
 /** Saved per repository and comparison, like the comments */
-export const reviewScope = (r: FileShapeRun) => `${r.repoRoot}|${r.targetLabel}|${r.baseLabel}`;
+export const reviewScope = (r: Comparison) => `${r.repoRoot}|${r.targetLabel}|${r.baseLabel}`;
 
 export const loadReviewed = (scope: string) => loadJSON<Record<string, string>>(PREFIX + scope, {});
 
 export const saveReviewed = (scope: string, marks: Record<string, string>) => saveJSON(PREFIX + scope, marks);
+
+export const clearReviewed = (scope: string) => removeKey(PREFIX + scope);
 
 /** Each changed file → a hash of its change */
 export const reviewTargets = (files: DiffFile[]) => new Map(files.map((f) => [f.path, changeHash(f)]));

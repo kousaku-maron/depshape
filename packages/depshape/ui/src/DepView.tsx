@@ -6,7 +6,7 @@ import { DepMap } from "./DepMap";
 import { ancestorsOf, buildModel, buildTree } from "./model";
 import { loadPref, savePref } from "./prefs";
 import { reviewSection, toComments } from "./review";
-import { loadReviewed, reviewedFiles, reviewScope, reviewTargets, saveReviewed } from "./reviewed";
+import { commentKey as commentKeyOf, loadReviewed, reviewedFiles, reviewScope, reviewTargets, saveReviewed } from "./reviewed";
 import { DEP_TITLE } from "./depTitle";
 import type { MapMode } from "./view";
 
@@ -19,7 +19,7 @@ export function DepView({ data: graph, active, onComments, modules, openIn, ai, 
   const [pins, setPins] = useState<string[]>(() => stringList(loadJSON<unknown>(pinKey, [])));
   useEffect(() => saveJSON(pinKey, pins), [pinKey, pins]);
   // review comments (per repository and comparison, like difit); they survive re-analysis
-  const commentKey = `depshape.comments:${repo}|${graph.targetLabel}|${graph.baseLabel}`;
+  const commentKey = commentKeyOf(reviewScope(graph));
   const [comments, setComments] = useState<ReviewComment[]>(() => loadCommentList<ReviewComment>(commentKey));
   const [mapMode, setMapMode] = useState<MapMode>(loadPref<MapMode>("mapMode", "changes"));
   // the comment sidebar starts closed every time; selecting a link or a row opens it

@@ -9,11 +9,11 @@ import { ErDiagram, type ErDiagramHandle } from "./ErDiagram";
 import type { Mode } from "./erLayout";
 import { clampLayout, DEFAULT_LAYOUT, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { reviewList, toComments } from "./review";
-import { loadReviewed, saveReviewed } from "./reviewed";
+import { comparisonScope, loadReviewed, saveReviewed } from "./reviewed";
 import { changeTitle, hashOf, matchesFilter, tableStats, valueChips, valueTarget, type Status } from "./view";
 
 /** Reviewed marks are kept per repository and comparison */
-const scopeOf = (d: DbShapeResult) => `${d.repoRoot}|${d.base.label}|${d.target.label}|${d.database.id}`;
+const scopeOf = (d: DbShapeResult) => comparisonScope({ repoRoot: d.repoRoot, baseLabel: d.base.label, targetLabel: d.target.label }) + d.database.id;
 
 const GROUPS: { status: Status; title: string }[] = [
   { status: "added", title: "新規テーブル" },

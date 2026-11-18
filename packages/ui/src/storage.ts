@@ -30,6 +30,20 @@ export function removeKey(key: string) {
   }
 }
 
+/** Removes every key that starts with `prefix` (dbshape keeps one per database) */
+export function removeKeysWithPrefix(prefix: string) {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(prefix)) keys.push(k);
+    }
+    for (const k of keys) localStorage.removeItem(k);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** A set of strings kept in localStorage under `key` (as an array) */
 export function useStoredSet(key: string): [Set<string>, Dispatch<SetStateAction<Set<string>>>] {
   const [value, setValue] = useState<Set<string>>(() => {

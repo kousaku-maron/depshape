@@ -57,6 +57,13 @@ export interface OpenRequest {
   seq: number;
 }
 
+/** The comparison a run is about; comments and reviewed marks are saved per repository and comparison */
+export interface Comparison {
+  repoRoot: string;
+  targetLabel: string;
+  baseLabel: string;
+}
+
 export interface ModuleViewProps<D> {
   data: D;
   /** Whether this module is the one shown; hidden modules stay mounted and keep their state */
@@ -85,4 +92,6 @@ export interface ShapeModule<D = any> {
   View: ComponentType<ModuleViewProps<D>>;
   /** Number shown on the rail icon (how much changed), or undefined for none */
   badge?: (data: D) => number | undefined;
+  /** Removes the comments and the reviewed marks saved for this comparison (--clean); called before the view mounts */
+  clearReview: (c: Comparison) => void;
 }

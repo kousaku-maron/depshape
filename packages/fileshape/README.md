@@ -20,7 +20,7 @@ npx @kousaku-maron/diffshape . main --merge-base
 | `fileshape abc1234` | そのコミット単体の変更 |
 | `fileshape staged` / `fileshape working` | ステージ済み / 未ステージの変更のみ |
 
-オプション: `--port <n>`、`--host`、`--no-open`、`--json`（`fileshape` のみ。差分を JSON で標準出力へ）
+オプション: `--port <n>`、`--host`、`--no-open`、`--clean`（この比較のレビューコメントと確認済みのマークを消してから開く）、`--json`（`fileshape` のみ。差分を JSON で標準出力へ）
 
 ## 画面
 

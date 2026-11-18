@@ -1,4 +1,4 @@
-import { copyText, CopyIcon, RefreshIcon, type AiBatch, type AiPlaced, type CommentReport, type OpenRequest, type ShapeModule } from "@diffshape/ui";
+import { copyText, CopyIcon, loadJSON, RefreshIcon, saveJSON, type AiBatch, type AiPlaced, type CommentReport, type OpenRequest, type ShapeModule } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { commentsPrompt } from "./ai";
 import { AiControl } from "./AiControl";
@@ -16,6 +16,21 @@ interface Info {
   baseLabel: string;
   baseRev: string | null;
   modules: string[];
+  /** An id of the server's run when it was started with --clean */
+  clean: string | null;
+}
+
+const CLEANED_KEY = "diffshape.cleaned";
+
+/**
+ * --clean: clears this comparison's comments and reviewed marks in every module, once per server run
+ * (the id is kept, so reloading the page keeps what was written since). Runs before any view mounts,
+ * as the views read their saved state when they mount.
+ */
+function cleanOnce(info: Info) {
+  if (!info.clean || loadJSON<string>(CLEANED_KEY, "") === info.clean) return;
+  for (const m of MODULES) if (info.modules.includes(m.id)) m.clearReview(info);
+  saveJSON(CLEANED_KEY, info.clean);
 }
 
 type Loaded = { state: "loading" } | { state: "ready"; data: unknown } | { state: "error"; error: string };
@@ -60,6 +75,7 @@ export function Shell() {
   const load = useCallback(async (refresh: boolean) => {
     try {
       const i = await getJSON<Info>(`/api/info${refresh ? "?refresh=1" : ""}`);
+      cleanOnce(i);
       setInfo(i);
       setFatal(null);
       // a module already shown keeps its view (and its state) until the new data arrives
