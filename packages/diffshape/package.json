@@ -1,6 +1,6 @@
 {
   "name": "@kousaku-maron/diffshape",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "See a git diff as the shape of what it changes: the line diff of every file (like difit), code dependencies (Go, TypeScript, JavaScript) and the PostgreSQL schema, side by side with what already exists",
   "keywords": [
     "diff",
