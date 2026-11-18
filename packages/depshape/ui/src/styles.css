@@ -92,14 +92,43 @@ main {
   background: var(--bg-soft);
   overflow: hidden;
 }
-.map-toolbar {
+/* the tree column, like fileshape's sidebar: its own head (変更 / 全体 and the fold button) on the sidebar color */
+.tree-col {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-soft);
+}
+.tree-head {
+  display: flex;
   gap: 6px;
-  flex-wrap: wrap;
-  padding: 5px 10px;
+  padding: 8px;
   border-bottom: 1px solid var(--border);
+}
+.tree-mode {
+  flex: 1;
+}
+.tree-mode > button {
+  flex: 1;
+  justify-content: center;
+}
+.tree-fold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+.tree-fold:hover {
+  color: var(--text);
 }
 .map-scroll {
   overflow: auto;
@@ -164,56 +193,38 @@ main {
   }
 }
 .map-scroll.tree {
+  flex: 1;
   height: auto;
+  min-height: 0;
   resize: none;
-  padding: 6px 6px 10px;
-  background: var(--bg);
-  font-family: var(--font-mono);
+  padding: 4px 0 16px;
+  background: var(--bg-soft);
+  font-family: var(--font-sans);
   font-size: var(--fs);
 }
-/* flat rows like difit's file tree: a folder's children hang off a thin guide line */
+/* the same rows as fileshape's tree: flat, 12px per level, no guide lines */
 .tchildren {
-  margin-left: 10px;
-  padding-left: 6px;
-  border-left: 1px solid var(--border);
+  margin-left: 12px;
 }
 .trow {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
-  padding: 0 6px 0 4px;
-  border-left: 2px solid transparent;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  height: 26px;
+  padding: 0 8px;
+  font-size: var(--fs);
   white-space: nowrap;
+  user-select: none;
 }
-.trow.open {
-  font-weight: 600;
-  cursor: pointer;
-}
-.trow.dir,
-.trow.rest {
-  cursor: pointer;
-}
-/* a changed file: a faint tint and a line in its color on the left */
-.trow.file.added {
-  background: color-mix(in srgb, var(--added-bg) 55%, transparent);
-  border-left-color: var(--added);
-}
-.trow.file.modified {
-  background: color-mix(in srgb, var(--modified-bg) 55%, transparent);
-  border-left-color: var(--modified);
-}
-.trow.file.removed {
-  background: color-mix(in srgb, var(--removed-bg) 55%, transparent);
-  border-left-color: var(--removed);
-}
-.trow.file.removed .tlabel {
-  text-decoration: line-through;
-}
-.trow.rest {
+/* folders: a chevron and a muted name, like fileshape */
+.trow.open,
+.trow.dir {
   color: var(--muted);
-  font-style: italic;
+  cursor: pointer;
+}
+/* what did not change is quieter, so the changes stand out among the whole repository */
+.trow.unchanged .tlabel {
+  color: var(--muted);
 }
 .trow.test .tlabel {
   color: var(--muted);
@@ -222,22 +233,25 @@ main {
 .trow.hovered {
   background: var(--bg-hover);
 }
-.trow.file.added:hover,
-.trow.file.added.hovered,
-.trow.file.modified:hover,
-.trow.file.modified.hovered,
-.trow.file.removed:hover,
-.trow.file.removed.hovered {
-  box-shadow: 0 0 0 1px var(--border) inset;
-}
 .trow.pinned {
   box-shadow: 0 0 0 1px var(--accent) inset;
 }
-.ticon {
-  width: 10px;
-  color: var(--muted);
-  font-size: 10px;
+/* fileshape's small fold chevron: pointing right when closed */
+.tfold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+.tfold svg {
+  transform: rotate(-90deg);
+  transition: transform 0.12s;
+}
+.tfold.open svg {
+  transform: none;
 }
 .tlabel {
   overflow: hidden;
@@ -261,7 +275,7 @@ main {
 .tbtn.on {
   opacity: 1;
 }
-/* keeps rows aligned where a row has no pin button ("ほか N" rows) */
+/* keeps the buttons aligned where a row has no "open in fileshape" button */
 .tbtn-space {
   flex: none;
   width: 20px;
@@ -269,23 +283,24 @@ main {
 .tbtn:hover {
   color: var(--accent);
 }
-/* reviewed (確認済み): faded like dbshape's tables, with a check in the review column */
-.trow.reviewed .tlabel,
+/* reviewed (確認済み): a muted name like fileshape's tree, with a check in the review column */
+.trow.reviewed .tlabel {
+  color: var(--muted);
+}
 .trow.reviewed .ds-status,
 .trow.reviewed .ds-change {
   opacity: 0.45;
 }
-.tbtn.treview.on,
-.tbtn.treview.on:hover,
-.tcheck {
-  color: var(--added);
-}
-.tcheck {
+/* the 確認済み check box at the start of a file row, like fileshape's tree */
+.tcheckbox {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
+  margin: 0;
+  accent-color: var(--added);
+  cursor: pointer;
+}
+.tcheckbox-space {
+  flex: none;
+  width: 13px;
 }
 
 /* dependency panel (right) */
@@ -463,10 +478,6 @@ main {
 .pcaption {
   fill: var(--muted);
   font-size: 11px;
-}
-/* the unchanged files of a folder, opened from "ほか N ファイル": a dashed guide line */
-.tgroup.rest-group > .tchildren {
-  border-left-style: dashed;
 }
 .eye,
 .pin-icon {

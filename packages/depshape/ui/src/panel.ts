@@ -8,7 +8,7 @@ import { baseName, dirStatus, folderEdgeStatus, parentDir, shortDir, type Model,
  * Source ids follow the tree's node ids:
  *   f:<file>   one file
  *   d:<dir>    a folder, i.e. every file under it (imports inside the folder are skipped)
- *   r:<dir>    the unchanged files directly in a folder (the tree's "ほか N ファイル" row)
+ *   r:<dir>    the unchanged files directly in a folder (the tree's old "ほか N ファイル" row; kept so saved comments and pins still open)
  *   p:<dir>    the files directly in a folder, i.e. one Go package (pinned from a package row)
  *   c:<dir>    the box that groups shown files of one folder (not a pin of its own); for Go it is the
  *              package, so who imports the package links to the box rather than to each file.

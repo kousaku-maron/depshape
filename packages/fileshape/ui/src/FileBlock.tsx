@@ -1,4 +1,4 @@
-import { ChangeCounts, ChevronIcon, CommentCount, CopyIcon, copyText } from "@diffshape/ui";
+import { ChangeCounts, ChevronIcon, CommentCount, CopyIcon, copyText, StatusMark } from "@diffshape/ui";
 import { memo, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { DiffFile } from "../../src/types";
 import { isImage, isMarkdown } from "./api";
@@ -16,8 +16,6 @@ import { buildRows, lineCount, type Expansion, type Gap } from "./model";
  * lines are drawn once it comes near the screen, so a large diff opens quickly.
  */
 
-const STATUS_MARK = { added: "A", modified: "M", removed: "D", renamed: "R" } as const;
-const STATUS_TEXT = { added: "追加", modified: "変更", removed: "削除", renamed: "名前の変更" } as const;
 
 /** Files with more lines than this start folded */
 export const LARGE_LINES = 1500;
@@ -99,13 +97,7 @@ export const FileBlock = memo(function FileBlock(p: Props) {
         <button className={`fs-fold${p.open ? " open" : ""}`} onClick={() => p.onToggle(file.path)} aria-label={p.open ? "折りたたむ" : "開く"} aria-expanded={p.open}>
           <ChevronIcon size={14} />
         </button>
-        {plain ? (
-          <span className="fs-st unchanged" title="変更なし" />
-        ) : (
-          <span className={`fs-st ${file.status}`} title={STATUS_TEXT[file.status]}>
-            {STATUS_MARK[file.status]}
-          </span>
-        )}
+        <StatusMark status={plain ? "unchanged" : file.status} />
         <span className="fs-file-path" title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path} onClick={() => p.onToggle(file.path)}>
           {file.oldPath && (
             <>

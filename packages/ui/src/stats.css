@@ -1,8 +1,47 @@
-/* Counts shared by the modules (Stats.tsx): color = status of a thing, + / − / ~ = what changed inside it. */
+/* Counts shared by the modules (Stats.tsx): a letter box = status of a thing, + / − / ~ = what changed inside it. */
+
+/* ---- status letter (A / M / D / R; blank for unchanged) */
+
+.ds-st {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+}
+.ds-st.small {
+  width: 15px;
+  height: 15px;
+  font-size: 10px;
+}
+.ds-st.added {
+  background: var(--added-bg);
+  color: var(--added);
+}
+.ds-st.modified,
+.ds-st.renamed {
+  background: var(--modified-bg);
+  color: var(--modified);
+}
+.ds-st.removed {
+  background: var(--removed-bg);
+  color: var(--removed);
+}
+/* unchanged: the slot stays (names line up) but empty, so it is not taken for a checkbox */
+.ds-st.unchanged {
+  background: none;
+}
 
 .ds-status {
   display: inline-flex;
-  gap: 6px;
+  gap: 8px;
   font-family: var(--font-sans);
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -10,10 +49,13 @@
 .ds-status-n {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
-.ds-status-dot {
-  font-size: 8px;
+/* a status nothing has: a quiet outlined box */
+.ds-status-n.zero .ds-st {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
 }
 
 .ds-change {
@@ -31,15 +73,12 @@
   background: var(--bg);
 }
 
-.ds-status-n.added,
 .ds-change .added {
   color: var(--added);
 }
-.ds-status-n.modified,
 .ds-change .modified {
   color: var(--modified);
 }
-.ds-status-n.removed,
 .ds-change .removed {
   color: var(--removed);
 }
