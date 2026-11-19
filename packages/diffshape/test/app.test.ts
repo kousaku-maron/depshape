@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { compareRange, type ResolvedSources } from "@diffshape/core";
 import { dbAnalyzer } from "@diffshape/dbshape";
 import { depAnalyzer } from "@diffshape/depshape";
 import { fileAnalyzer } from "@diffshape/fileshape";
@@ -123,5 +124,26 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["--schema", "x"], "depshape")).toThrow(/不明なオプション/);
     expect(() => parseArgs(["--only", "x"], "diffshape")).toThrow(/file \/ dep \/ db/);
     expect(() => parseArgs([".", "main", "x"], "diffshape")).toThrow(/多すぎます/);
+  });
+});
+
+describe("compareRange", () => {
+  const A = "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d";
+  const B = "5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f80";
+  const sources = (target: ResolvedSources["target"], base: ResolvedSources["base"]): ResolvedSources => ({ root: "/r", target, base, targetLabel: "t", baseLabel: "b" });
+
+  it("names a comparison of commits as a git range, with the commits compared", () => {
+    expect(compareRange({ target: "feature", base: "main" }, sources({ kind: "rev", rev: B }, { kind: "rev", rev: A }))).toBe("diff main..feature (1a2b3c4..5d6e7f8)");
+    expect(compareRange({ target: "feature", base: "main", mergeBase: true }, sources({ kind: "rev", rev: B }, { kind: "rev", rev: A }))).toBe("diff main...feature (1a2b3c4..5d6e7f8)");
+    // one commit against its parent
+    expect(compareRange({ target: "@" }, sources({ kind: "rev", rev: B }, { kind: "rev", rev: A }))).toBe("diff HEAD^..HEAD (1a2b3c4..5d6e7f8)");
+    // the names are the commits already
+    expect(compareRange({ target: "5d6e7f8", base: "1a2b3c4" }, sources({ kind: "rev", rev: B }, { kind: "rev", rev: A }))).toBe("diff 1a2b3c4..5d6e7f8");
+  });
+
+  it("has no range for the working tree or the staged state", () => {
+    expect(compareRange({ target: "." }, sources({ kind: "worktree" }, { kind: "rev", rev: A }))).toBeNull();
+    expect(compareRange({ target: "staged" }, sources({ kind: "index" }, { kind: "rev", rev: A }))).toBeNull();
+    expect(compareRange({ target: "working" }, sources({ kind: "worktree" }, { kind: "index" }))).toBeNull();
   });
 });

@@ -283,7 +283,7 @@ export function FileView({ data: diff, active, onComments, request, ai, onAi }: 
   // tell the shell how many comments are open, how to copy them, and what an AI reviewer is told
   useEffect(() => {
     const open = comments.filter((c) => commentState(run, c, contents.get(c.path)) !== "resolved").length;
-    onComments({ open, prompt: () => formatPrompt(run, comments, { header: false, contents }).text, review: () => reviewSection(diff) });
+    onComments({ open, prompt: () => formatPrompt(run, comments, { contents }).text, review: () => reviewSection(diff) });
   }, [comments, run, contents, diff, onComments]);
 
   // ---- an AI review: each comment that is for this module goes to the lines whose code it quotes.

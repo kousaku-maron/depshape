@@ -9,6 +9,7 @@ import "./styles.css";
 export const fileModule: ShapeModule<FileShapeRun> = {
   id: "file",
   title: "ファイル",
+  heading: "ファイルの差分",
   description: "ファイルの差分（fileshape）: 変更された各ファイルの行の差分",
   icon: FileIcon,
   View: FileView,

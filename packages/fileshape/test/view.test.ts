@@ -93,18 +93,17 @@ describe("line comments", () => {
   it("points at the base side with (old)", () => {
     const c = newComment({ path: "x.ts", side: "old", line: 2, code: "old()" }, "消して大丈夫？");
     expect(locate(before, c)).toEqual({ state: "open", line: 2 });
-    const { text, included } = formatPrompt(run(before), [c], { header: false });
+    const { text, included } = formatPrompt(run(before), [c]);
     expect(included).toBe(1);
-    expect(text).toBe("1. x.ts:L2 (old)（変更前の 2 行目）\n   コード: old()\n   コメント: 消して大丈夫？\n");
+    expect(text).toBe("x.ts:L2 (old)\n消して大丈夫？\n");
   });
 
-  it("copies open comments with the header, and leaves resolved ones out", () => {
+  it("copies open comments like difit, and leaves resolved ones out", () => {
     const open = newComment({ path: "x.ts", side: "new", line: 2, code: "fixMe()" }, "一行目\n二行目");
     const gone = newComment({ path: "y.ts", side: "new", line: 1, code: "z" }, "消えた");
     const { text, included } = formatPrompt(run(before), [open, gone]);
     expect(included).toBe(1);
-    expect(text).toContain("対象: ファイルの差分（fileshape）");
-    expect(text).toContain("1. x.ts:L2（変更後の 2 行目）\n   コード: fixMe()\n   コメント: 一行目\n   二行目");
+    expect(text).toBe("x.ts:L2\n一行目\n二行目\n");
     expect(text).not.toContain("消えた");
   });
 });
@@ -245,13 +244,13 @@ describe("range comments", () => {
   const f = twoHunks();
   const run = (x: DiffFile): FileShapeRun => ({ repoRoot: "/repo", targetLabel: "作業ディレクトリ", baseLabel: "HEAD", files: [x] });
 
-  it("follows the same lines, and copies them as L-L with the code", () => {
+  it("follows the same lines, and copies them as L-L where they are now", () => {
     const c = newComment({ path: "x.ts", side: "new", line: 9, endLine: 11, code: "line 9\nTEN\nline 11" }, "まとめて見直して");
     expect(locate(f, c)).toEqual({ state: "open", line: 9, endLine: 11 });
     const shifted = diff(["@@ -1,3 +1,4 @@", "+new first", " line 1", " line 2", " line 3", "@@ -7,7 +8,7 @@", " line 7", " line 8", " line 9", "-line 10", "+TEN", " line 11", " line 12", " line 13"]);
     expect(locate(shifted, c)).toEqual({ state: "open", line: 10, endLine: 12 });
-    const { text } = formatPrompt(run(f), [c], { header: false });
-    expect(text).toBe("1. x.ts:L9-L11（変更後の 9〜11 行目）\n   コード:\n   ```\n   line 9\n   TEN\n   line 11\n   ```\n   コメント: まとめて見直して\n");
+    // the lines it is on now
+    expect(formatPrompt(run(shifted), [c]).text).toBe("x.ts:L10-L12\nまとめて見直して\n");
   });
 
   it("places a comment on an opened line once the file's content is loaded", () => {
@@ -305,7 +304,7 @@ describe("unchanged files", () => {
     const run: FileShapeRun = { repoRoot: "/r", targetLabel: "t", baseLabel: "b", files: [f] };
     const c = newComment({ path: "a.ts", side: "new", line: 2, code: "two" }, "why?", true);
     expect(locate(f, c)).toEqual({ state: "open", line: 2 });
-    expect(formatPrompt(run, [c], { header: false }).text).toContain("a.ts:L2（2 行目（変更なし））");
+    expect(formatPrompt(run, [c]).text).toBe("a.ts:L2\nwhy?\n");
   });
 });
 

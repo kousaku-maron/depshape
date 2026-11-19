@@ -74,7 +74,7 @@ export function AiControl({ info, modules, current, reports, acks, onBatch, onRe
   const toReview = inScope(reviewers);
   const toFix = inScope(modules.filter((m) => (reports[m.id]?.open ?? 0) > 0));
   const openCount = toFix.reduce((n, m) => n + reports[m.id].open, 0);
-  const section = (m: ShapeModule): Section => ({ id: m.id, description: m.description, review: reports[m.id]?.review?.(), comments: (reports[m.id]?.open ?? 0) > 0 ? reports[m.id].prompt() : "" });
+  const section = (m: ShapeModule): Section => ({ id: m.id, heading: m.heading, review: reports[m.id]?.review?.(), comments: (reports[m.id]?.open ?? 0) > 0 ? reports[m.id].prompt() : "" });
 
   const agents = state?.agents ?? [];
   const chosen = { review: settle(prefs.review, agents), fix: settle(prefs.fix, agents) };

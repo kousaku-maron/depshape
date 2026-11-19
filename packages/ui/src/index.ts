@@ -3,7 +3,7 @@ export { copyText } from "./clipboard";
 export { CommentCount } from "./CommentCount";
 export { CommentInput } from "./CommentInput";
 export { CommentCard, CommentComposer, type CommentCardProps, type CommentComposerProps } from "./CommentParts";
-export { COMMENT_STATE_LABEL, loadCommentList, newCommentId, promptHeader, saveCommentList, type CommentStateName } from "./comments";
+export { COMMENT_STATE_LABEL, loadCommentList, joinEntries, newCommentId, promptEntry, saveCommentList, type CommentStateName } from "./comments";
 export { hashOf } from "./hash";
 export { ChangeCounts, STATUS_LABEL, StatusCounts, StatusMark, type ChangeStats, type MarkStatus, type StatusStats } from "./Stats";
 export { AiIcon, CheckIcon, ChevronIcon, CommentIcon, CopyIcon, DatabaseIcon, EyeIcon, FileIcon, GraphIcon, PinIcon, RefreshIcon } from "./icons";

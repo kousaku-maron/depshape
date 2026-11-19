@@ -66,3 +66,20 @@ export async function resolveSources(cwd: string, opts: CompareOptions): Promise
 
   return { root, target, base, targetLabel, baseLabel };
 }
+
+/**
+ * The comparison as a git range for a copied list of comments, like difit: "diff main..feature",
+ * "diff main...feature" with --merge-base, and the commits compared after it when the names are not
+ * already them ("diff main..feature (1a2b3c4..5d6e7f8)"). Null unless both sides are commits: the
+ * working tree and the staged state have no range to name.
+ */
+export function compareRange(opts: CompareOptions, s: ResolvedSources): string | null {
+  if (s.target.kind !== "rev" || s.base.kind !== "rev") return null;
+  const target = opts.target === "@" ? "HEAD" : opts.target ?? ".";
+  const base = opts.base ? (opts.base === "@" ? "HEAD" : opts.base) : `${target}^`;
+  const sep = opts.base && opts.mergeBase ? "..." : "..";
+  const short = (rev: string) => rev.slice(0, 7);
+  const named = (name: string, rev: string) => /^[0-9a-f]{7,40}$/.test(name) && rev.startsWith(name);
+  const commits = named(base, s.base.rev) && named(target, s.target.rev) ? "" : ` (${short(s.base.rev)}..${short(s.target.rev)})`;
+  return `diff ${base}${sep}${target}${commits}`;
+}

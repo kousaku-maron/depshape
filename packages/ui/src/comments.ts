@@ -28,7 +28,11 @@ export const COMMENT_STATE_LABEL: Record<CommentStateName, string> = {
   resolved: "解消済み？",
 };
 
-/** The first lines of a copied prompt: what the comments are and which comparison they are about */
-export function promptHeader(p: { repoRoot: string; targetLabel: string; baseLabel: string }): string[] {
-  return ["以下は、git の差分のレビュービューア diffshape で付けたレビューコメントです。各指摘に対応してください。", `リポジトリ: ${p.repoRoot}`, `比較: ${p.targetLabel} と ${p.baseLabel} の差分`];
-}
+/**
+ * One comment of a copied list, like difit's: the line that says what it points at ("src/a.ts:L12",
+ * "db/schema.sql:L4 カラム billing.invoices.price_id"), then its body as written.
+ */
+export const promptEntry = (where: string, body: string) => `${where}\n${body.trim()}`;
+
+/** The comments of one module as one text, "=====" between them; "" for none */
+export const joinEntries = (entries: string[]) => (entries.length ? `${entries.join("\n=====\n")}\n` : "");

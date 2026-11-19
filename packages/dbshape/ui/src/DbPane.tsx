@@ -66,7 +66,7 @@ export function DbPane({ data, active, onComments, ai, aiPrefix, onAi, switcher 
   // tell the shell how many comments are open, how to copy them, and what an AI reviewer is told
   useEffect(() => {
     const open = comments.filter((c) => commentState(data, c) !== "resolved").length;
-    onComments({ open, prompt: () => formatPrompt(data, comments, { header: false }).text, review: () => reviewList(data, aiPrefix) });
+    onComments({ open, prompt: () => formatPrompt(data, comments).text, review: () => reviewList(data, aiPrefix) });
   }, [data, comments, aiPrefix, onComments]);
 
   // ---- an AI review: the comments that name a part of this database's schema are kept

@@ -15,6 +15,7 @@ interface Info {
   targetLabel: string;
   baseLabel: string;
   baseRev: string | null;
+  range: string | null;
   modules: string[];
   /** An id of the server's run when it was started with --clean */
   clean: string | null;
@@ -165,7 +166,7 @@ export function Shell() {
   const openTotal = withComments.reduce((n, m) => n + reports[m.id].open, 0);
   const copyAll = async () => {
     if (!info || openTotal === 0) return;
-    await copyText(commentsPrompt(info, withComments.map((m) => ({ id: m.id, description: m.description, comments: reports[m.id].prompt() }))));
+    await copyText(commentsPrompt(info, withComments.map((m) => ({ id: m.id, heading: m.heading, comments: reports[m.id].prompt() }))));
     flash(`${openTotal} 件をコピーしました`);
   };
 
@@ -195,7 +196,7 @@ export function Shell() {
           className="ds-btn ds-btn-note"
           onClick={() => void copyAll()}
           disabled={openTotal === 0}
-          title={openTotal ? `未対応のコメント（${withComments.map((m) => `${m.title} ${reports[m.id].open}`).join("、")}）を AI 用のプロンプトとしてコピー` : "未対応のコメントはありません"}
+          title={openTotal ? `未対応のコメント（${withComments.map((m) => `${m.title} ${reports[m.id].open}`).join("、")}）を AI に貼れる形でコピー（場所と本文だけ）` : "未対応のコメントはありません"}
         >
           <CopyIcon size={13} />
           AI 用にコピー{openTotal > 0 ? `（${openTotal}）` : ""}

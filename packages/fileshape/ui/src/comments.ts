@@ -1,4 +1,4 @@
-import { loadCommentList, newCommentId, promptHeader, removeKey, saveCommentList } from "@diffshape/ui";
+import { joinEntries, loadCommentList, newCommentId, promptEntry, removeKey, saveCommentList } from "@diffshape/ui";
 import type { DiffFile, FileShapeRun } from "../../src/types";
 import { oldToNew } from "./model";
 
@@ -129,35 +129,20 @@ export const linesLabel = (side: Side, line: number, endLine?: number, unchanged
   return unchanged ? `${lines}（変更なし）` : `${SIDE_LABEL[side]}の ${lines}`;
 };
 
-const codeLines = (label: string, code: string) => {
-  const lines = code.split("\n");
-  if (lines.length === 1) return [`   ${label}: ${code.trim()}`];
-  return [`   ${label}:`, "   ```", ...lines.map((l) => `   ${l}`), "   ```"];
-};
-
+/**
+ * Comments as a list to hand to an AI, like difit's: where each one is now, then its body.
+ * A resolved comment is left out unless `includeResolved` (the copy of one comment).
+ */
 export function formatPrompt(
   run: FileShapeRun,
   comments: ReviewComment[],
-  opts: { includeResolved?: boolean; header?: boolean; contents?: Map<string, string[]> } = {},
+  opts: { includeResolved?: boolean; contents?: Map<string, string[]> } = {},
 ): { text: string; included: number; skipped: number } {
   const shown = comments.map((c) => ({ c, at: locate(fileOf(run, c.path), c, opts.contents?.get(c.path)) }));
   const list = opts.includeResolved ? shown : shown.filter((x) => x.at.state !== "resolved");
-  // without the header: a section of the prompt the app combines from every module
-  const out: string[] = opts.header === false ? [] : [...promptHeader(run), "対象: ファイルの差分（fileshape）", ""];
-  list.forEach(({ c, at }, i) => {
-    const line = at.line ?? c.line;
-    const end = at.line !== undefined ? at.endLine : c.endLine;
-    out.push(`${i + 1}. ${where(c.path, c.side, line, end)}（${linesLabel(c.side, line, end, c.unchanged)}）${at.state === "resolved" ? "（解消済み？）" : ""}`);
-    if (at.state === "updated") {
-      const text = sideText(fileOf(run, c.path)!, c.side, opts.contents?.get(c.path));
-      const now = Array.from({ length: lengthOf(c) }, (_, k) => text.get(line + k) ?? "").join("\n");
-      out.push(...codeLines("コード", now), ...codeLines("コメントしたときは", c.code));
-    } else {
-      out.push(...codeLines("コード", c.code));
-    }
-    out.push(`   コメント: ${c.body.trim().replace(/\n/g, "\n   ")}`, "");
-  });
-  return { text: out.join("\n").trimEnd() + "\n", included: list.length, skipped: comments.length - list.length };
+  // the line it is on now; a comment that lost its line keeps the one it was written on
+  const entries = list.map(({ c, at }) => promptEntry(where(c.path, c.side, at.line ?? c.line, at.line !== undefined ? at.endLine : c.endLine), c.body));
+  return { text: joinEntries(entries), included: list.length, skipped: comments.length - list.length };
 }
 
 // ---- saved per repository and comparison, like the other modules

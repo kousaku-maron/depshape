@@ -8,6 +8,7 @@ import "./styles.css";
 export const depModule: ShapeModule<DiffGraph> = {
   id: "dep",
   title: "依存",
+  heading: "依存関係",
   description: "コードの依存関係（depshape）: フォルダ・ファイルの import の変化",
   icon: GraphIcon,
   View: DepView,

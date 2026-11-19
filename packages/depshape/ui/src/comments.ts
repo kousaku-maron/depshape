@@ -1,5 +1,5 @@
-import { promptHeader } from "@diffshape/ui";
-import { baseName, moduleOf, type Model, type TreeDir } from "./model";
+import { joinEntries, promptEntry } from "@diffshape/ui";
+import { moduleOf, type Model, type TreeDir } from "./model";
 import { findLink, resolveSource, sourceLinks, type PanelLink } from "./panel";
 import { pathOf } from "./view";
 
@@ -72,20 +72,37 @@ export function importPath(model: Model, dir: string): string {
   return rel ? `${m.path}/${rel}` : m.path;
 }
 
-function describeSource(model: Model, tree: Map<string, TreeDir>, id: string): string {
+/** A folder as it is written in a prompt: its import path, or "." for the root of a repository without a Go module there */
+const folderName = (model: Model, dir: string) => importPath(model, dir) || ".";
+
+/** A repo folder written with a trailing "/": "." for the root ("./", "./*") */
+const slashed = (dir: string) => `${dir || "."}/`;
+
+/**
+ * What a row of the panel stands for, as a path: a file, "dir/" for a folder and everything below it,
+ * "dir/*" for the files right in it (a Go package).
+ */
+function sourceAddress(id: string): string {
   // a row of the panel's dependents column (who imports the shown item)
   if (id.startsWith("i:")) {
     const q = id.slice(4);
-    return id.startsWith("i:f:") ? q : id.startsWith("i:d:") ? `${q}/ 直下のファイル` : `${q}/ 配下`;
+    return id.startsWith("i:f:") ? q : id.startsWith("i:d:") ? `${slashed(q)}*` : slashed(q);
   }
   const p = pathOf(id);
   if (id.startsWith("f:")) return p;
-  if (id.startsWith("d:")) return `${p}/ 配下`;
-  if (id.startsWith("p:")) return `${p}/ 直下のファイル（パッケージ ${baseName(p)}）`;
-  if (id.startsWith("c:")) return `パッケージ ${p}/`;
-  const d = tree.get(p);
-  const n = d ? d.files.filter((f) => f.status === "unchanged").length : 0;
-  return `${p}/ の変更のないファイル ${n} 個`;
+  if (id.startsWith("d:")) return slashed(p);
+  if (id.startsWith("p:") || id.startsWith("c:")) return `${slashed(p)}*`;
+  // r: the files of the folder this change left alone
+  return `${slashed(p)}*（変更のないファイル）`;
+}
+
+/** What a dependency points at, as an agent greps for it: the import path, or the one file it imports (TS) */
+function targetAddress(model: Model, id: string, l: PanelLink | null): string {
+  if (id.startsWith("x:") || id.startsWith("t:")) return id.slice(2);
+  const dir = id.slice(2);
+  if (id.startsWith("g:")) return `${folderName(model, dir)}/`;
+  const files = (l?.files ?? []).filter((f) => f.status !== "removed");
+  return files.length === 1 ? files[0].path : folderName(model, dir);
 }
 
 export function describeTarget(model: Model, id: string, l: PanelLink | null): string {
@@ -93,21 +110,11 @@ export function describeTarget(model: Model, id: string, l: PanelLink | null): s
   if (id.startsWith("t:")) return id.slice(2); // one file of a TS folder
   const dir = id.slice(2);
   // a folded group in the panel stands for everything below the folder
-  const name = id.startsWith("g:") ? `${importPath(model, dir)}/ 配下` : importPath(model, dir);
+  const name = id.startsWith("g:") ? `${folderName(model, dir)}/ 配下` : folderName(model, dir);
   // TS knows the exact files; list them so an agent can open them directly
-  const files = (l?.files ?? []).filter((f) => f.status !== "removed").map((f) => f.path.slice(dir.length + 1));
+  const files = (l?.files ?? []).filter((f) => f.status !== "removed").map((f) => (dir ? f.path.slice(dir.length + 1) : f.path));
   if (!files.length) return name;
   return id.startsWith("g:") ? `${name}（${files.join(", ")}）` : `${name}/（${files.join(", ")}）`;
-}
-
-function linkStatusText(l: PanelLink | null, fromId: string): string {
-  if (!l || l.after === 0) return "現在は存在しない（解消済み？）";
-  const typeOnly = l.typeOnly ? "、型のみ" : "";
-  if (fromId.startsWith("f:")) return (l.status === "added" ? "今回追加した import" : "既存の import") + typeOnly;
-  const parts = [`import しているファイル 変更前 ${l.before} → 変更後 ${l.after}`];
-  if (l.added) parts.push(`今回追加 ${l.added}`);
-  if (l.removed) parts.push(`今回削除 ${l.removed}`);
-  return parts.join("、");
 }
 
 /** Where the unchanged files of a folder usually go: the existing pattern to compare against. */
@@ -118,60 +125,29 @@ export function folderPattern(model: Model, tree: Map<string, TreeDir>, dir: str
     .filter(({ link }) => link.before > 0)
     .sort((a, b) => b.link.before - a.link.before)
     .slice(0, top);
-  if (links.length === 0) return `${dir}/ の変更のないファイル ${s.files.length} 個は、このリポジトリ内のパッケージを import していません`;
-  const list = links.map(({ target, link }) => `${importPath(model, target.dir)} (${link.before})`).join(", ");
-  return `${dir}/ の変更のないファイル ${s.files.length} 個の主な依存先: ${list}`;
+  if (links.length === 0) return `${slashed(dir)} の変更のないファイル ${s.files.length} 個は、このリポジトリ内のパッケージを import していません`;
+  const list = links.map(({ target, link }) => `${folderName(model, target.dir)} (${link.before})`).join(", ");
+  return `${slashed(dir)} の変更のないファイル ${s.files.length} 個の主な依存先: ${list}`;
 }
 
+/**
+ * Comments as a list to hand to an AI, like difit's: what each one points at on one line (several
+ * targets with ", "), then its body. A resolved comment is left out unless `includeResolved`.
+ */
 export function formatPrompt(
   model: Model,
   tree: Map<string, TreeDir>,
   comments: ReviewComment[],
-  opts: { includeResolved?: boolean; header?: boolean } = {},
+  opts: { includeResolved?: boolean } = {},
 ): { text: string; included: number; skipped: number } {
-  const open = opts.includeResolved ? comments : comments.filter((c) => commentState(model, tree, c) !== "resolved");
-  const g = model.graph;
-  // without the header: a section of the prompt the app combines from every module
-  const out: string[] = opts.header === false ? [] : [...promptHeader(g), "対象: コードの依存関係（depshape）", ""];
-  open.forEach((c, i) => {
-    const links = c.targets.map(parseKey).filter((t): t is { kind: "link"; from: string; to: string } => t.kind === "link");
-    const items = c.targets.map(parseKey).filter((t): t is { kind: "item"; id: string } => t.kind === "item");
-    const lines: string[] = [];
-    if (links.length) {
-      lines.push(links.length === 1 ? "依存:" : `依存（${links.length}件）:`);
-      for (const t of links) {
-        const l = linkFor(model, tree, t.from, t.to);
-        // a dependent link points at a shown item, not at a package
-        const to = t.from.startsWith("i:") ? describeSource(model, tree, t.to) : describeTarget(model, t.to, l);
-        lines.push(`  - ${describeSource(model, tree, t.from)} → ${to}（${linkStatusText(l, t.from.replace(/^i:/, ""))}）`);
-      }
-    }
-    if (items.length) {
-      lines.push(items.length === 1 ? "対象:" : `対象（${items.length}件）:`);
-      for (const t of items) {
-        const p = pathOf(t.id);
-        if (t.id.startsWith("f:")) {
-          const f = model.fileByPath.get(p);
-          const notes: string[] = [];
-          if (!f || f.status === "removed") notes.push("現在は存在しない");
-          else {
-            if (f.status === "added") notes.push("今回追加");
-            if (f.status === "modified") notes.push("今回変更");
-          }
-          lines.push(`  - ファイル ${p}${notes.length ? `（${notes.join("、")}）` : ""}`);
-        } else lines.push(`  - ${t.id.startsWith("d:") ? `フォルダ ${p}/` : describeSource(model, tree, t.id)}`);
-      }
-    }
-    // for dependency comments: where the existing files of the same folder usually go
-    const dirs = new Set<string>();
-    for (const t of links) if (t.from.startsWith("f:")) dirs.add(model.fileByPath.get(pathOf(t.from))?.dir ?? "");
-    const refs = [...dirs].filter(Boolean).map((d) => folderPattern(model, tree, d)).filter((x): x is string => !!x);
-    for (const r of refs) lines.push(`参考: ${r}`);
-    const state = commentState(model, tree, c);
-    out.push(`${i + 1}.${state === "partial" ? "（一部は解消済み）" : state === "resolved" ? "（解消済み？）" : ""}`);
-    out.push(...lines.map((l) => `   ${l}`));
-    out.push(`   コメント: ${c.body.trim().replace(/\n/g, "\n   ")}`);
-    out.push("");
-  });
-  return { text: out.join("\n").trimEnd() + "\n", included: open.length, skipped: comments.length - open.length };
+  const list = opts.includeResolved ? comments : comments.filter((c) => commentState(model, tree, c) !== "resolved");
+  const address = (key: string) => {
+    const t = parseKey(key);
+    if (t.kind === "item") return sourceAddress(t.id);
+    // a dependent link points at a shown item, not at a package
+    const to = t.from.startsWith("i:") ? sourceAddress(t.to) : targetAddress(model, t.to, linkFor(model, tree, t.from, t.to));
+    return `${sourceAddress(t.from)} → ${to}`;
+  };
+  const entries = list.map((c) => promptEntry(c.targets.map(address).join(", "), c.body));
+  return { text: joinEntries(entries), included: list.length, skipped: comments.length - list.length };
 }

@@ -10,7 +10,7 @@ import type { ComponentType } from "react";
 export interface CommentReport {
   /** Comments that still need attention */
   open: number;
-  /** Those comments as a prompt section, without the shared header (repository, comparison) */
+  /** Those comments as a list (see promptEntry / joinEntries), without the module's heading; "" for none */
   prompt: () => string;
   /**
    * What an AI reviewer needs to review this module: what changed, what a comment can point at and how
@@ -84,8 +84,10 @@ export interface ModuleViewProps<D> {
 export interface ShapeModule<D = any> {
   /** Same id as the server-side analyzer ("dep", "db") */
   id: string;
-  /** Short name on the rail and in the copied prompt */
+  /** Short name on the rail */
   title: string;
+  /** The heading of this module's part of a copied list and of the AI prompts ("ファイルの差分") */
+  heading: string;
   /** Longer description for the tooltip */
   description: string;
   icon: ComponentType<{ size?: number }>;
