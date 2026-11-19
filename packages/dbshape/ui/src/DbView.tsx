@@ -38,13 +38,11 @@ export function DbView({ data: run, active, onComments, ai, onAi }: ModuleViewPr
     const withOpen = dbs.filter((d) => (reports[d.database.id]?.open ?? 0) > 0);
     onComments({
       open: withOpen.reduce((n, d) => n + reports[d.database.id].open, 0),
-      prompt: () =>
-        withOpen
-          .map((d) => {
-            const text = reports[d.database.id].prompt().trimEnd();
-            return multi ? `### DB: ${d.database.name}\n\n${text}` : text;
-          })
-          .join("\n\n"),
+      // one list: the path of each definition tells the databases apart
+      prompt: () => {
+        const lists = withOpen.map((d) => reports[d.database.id].prompt().trimEnd()).filter(Boolean);
+        return lists.length ? `${lists.join("\n=====\n")}\n` : "";
+      },
       // what changed in each database, then how to answer (a database without changes is left out)
       review: () => {
         const lists = dbs.map((d) => ({ d, text: reports[d.database.id]?.review?.() ?? "" })).filter((x) => x.text);

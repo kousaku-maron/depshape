@@ -5,7 +5,7 @@ import { buildModel, buildTree } from "../ui/src/model";
 import { reviewSection, toComments } from "../ui/src/review";
 
 function file(path: string, status: FileNode["status"] = "unchanged"): FileNode {
-  const dir = path.slice(0, path.lastIndexOf("/"));
+  const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
   return { path, dir, status, linesBefore: 10, linesAfter: 10, isTest: path.endsWith("_test.go") };
 }
 function edge(from: string, to: string, status: Edge["status"] = "unchanged"): Edge {
@@ -56,27 +56,21 @@ describe("comment keys", () => {
 });
 
 describe("formatPrompt", () => {
-  it("adds the import path, link status and the folder's existing pattern", () => {
+  it("puts every target of a comment on its first line, then the comment, like difit", () => {
     const model = buildModel(before);
     const { byPath } = buildTree(model);
     const { text, included } = formatPrompt(model, byPath, [comment([NEW_LINK, NEW_FILE])]);
     expect(included).toBe(1);
-    expect(text).toContain("リポジトリ: /repo");
-    expect(text).toContain("app/handler/new.go → example.com/app/driver/api（今回追加した import）");
-    expect(text).toContain("ファイル app/handler/new.go（今回追加）");
-    expect(text).toContain("参考: app/handler/ の変更のないファイル 3 個の主な依存先: example.com/app/usecase (2)");
-    expect(text).toContain("コメント: usecase を経由してください");
+    // the full import path, so an agent can grep for the import line
+    expect(text).toBe("app/handler/new.go → example.com/app/driver/api, app/handler/new.go\nusecase を経由してください\n");
   });
 
-  it("leaves out the shared header when the app combines it with other modules", () => {
+  it("separates comments with =====, and has no header of its own", () => {
     const model = buildModel(before);
     const { byPath } = buildTree(model);
-    const full = formatPrompt(model, byPath, [comment([NEW_FILE])]).text;
-    const section = formatPrompt(model, byPath, [comment([NEW_FILE])], { header: false }).text;
-    expect(full.split("\n")[0]).toContain("diffshape");
-    expect(full).toContain("対象: コードの依存関係（depshape）");
-    expect(section.startsWith("1.")).toBe(true);
-    expect(full.endsWith(section)).toBe(true);
+    const { text } = formatPrompt(model, byPath, [comment([NEW_FILE]), comment([NEW_LINK])]);
+    expect(text.split("\n=====\n")).toHaveLength(2);
+    expect(text).not.toContain("diffshape");
   });
 });
 
@@ -137,6 +131,26 @@ describe("AI review", () => {
     expect(text).toContain("- app/handler/gone.go（今回削除）\n  - 削除した import → example.com/app/usecase");
     const quiet = buildModel(graphWith([file("app/handler/a.go", "modified"), file("app/usecase/u.go")], [edge("app/handler/a.go", "app/usecase")]));
     expect(reviewSection(quiet, buildTree(quiet).byPath)).toBe("");
+  });
+
+  it("writes the root of a repository without a Go module as \".\"", () => {
+    const g: DiffGraph = {
+      ...graphWith(
+        [file("config.ts"), file("env.ts"), file("web/page.ts", "added"), file("web/old.ts")],
+        [
+          { from: "web/page.ts", to: "", external: false, status: "added", files: [{ path: "config.ts", status: "added" }, { path: "env.ts", status: "added" }] },
+          { from: "web/old.ts", to: "", external: false, status: "unchanged", files: [{ path: "config.ts", status: "unchanged" }] },
+        ],
+      ),
+      modules: [],
+    };
+    const m = buildModel(g);
+    const { byPath: tree } = buildTree(m);
+    const text = reviewSection(m, tree);
+    expect(text).toContain("  - 追加した import → ./（config.ts, env.ts）");
+    expect(text).toContain("  参考: web/ の変更のないファイル 1 個の主な依存先: . (1)");
+    const c: ReviewComment = { id: "1", targets: [linkKey("f:web/page.ts", "d:")], body: "設定は lib から", createdAt: 0 };
+    expect(formatPrompt(m, tree, [c]).text).toBe("web/page.ts → .\n設定は lib から\n");
   });
 
   it("keeps the comments that point at a dependency or a file that is there, marked as the AI's", () => {

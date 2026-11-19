@@ -191,7 +191,8 @@ describe("target tree", () => {
     const key = linkKey("f:web/app/page.tsx", "g:web/lib");
     expect(findLink(m, t, "f:web/app/page.tsx", "g:web/lib")).toMatchObject({ after: 1 });
     const { text } = formatPrompt(m, t, [{ id: "c", targets: [key], body: "x", createdAt: 0 }]);
-    expect(text).toContain("web/app/page.tsx → web/lib/ 配下（front/api.ts, front/types.ts, server/db.ts, utils.ts）");
+    // a folded group: the folder and everything below it
+    expect(text).toBe("web/app/page.tsx → web/lib/\nx\n");
   });
 
   it("keeps Go packages as the leaves: groups fold, a parent package gets its own row, nothing opens into files", () => {
@@ -292,7 +293,7 @@ describe("dependents (who imports the shown items)", () => {
     const key = linkKey("i:f:web/app/page.tsx", "f:web/ui/card.tsx");
     expect(findLink(m, t, "i:f:web/app/page.tsx", "f:web/ui/card.tsx")).toMatchObject({ status: "added" });
     const { text } = formatPrompt(m, t, [{ id: "c", targets: [key], body: "x", createdAt: 0 }]);
-    expect(text).toContain("web/app/page.tsx → web/ui/card.tsx（今回追加した import）");
+    expect(text).toBe("web/app/page.tsx → web/ui/card.tsx\nx\n");
   });
 });
 
@@ -316,7 +317,8 @@ describe("shown items in path order, grouped by folder", () => {
     expect(p.sources.map((s) => `${"  ".repeat(s.depth)}${s.label}`)).toEqual(["a/", "  x.go", "  y.go", "b/", "  w.go", "  z.go"]);
     expect(p.inLinks.map((l) => `${l.from}>${l.to}:${l.status}`).sort()).toEqual(["i:d:cmd>c:app/a:unchanged", "i:d:cmd>c:app/b:added"]);
     const { text } = formatPrompt(m, t, [{ id: "c", targets: [linkKey("i:d:cmd", "c:app/b")], body: "x", createdAt: 0 }]);
-    expect(text).toContain("cmd/ 直下のファイル → パッケージ app/b/（import しているファイル 変更前 0 → 変更後 1、今回追加 1）");
+    // the files right in a folder (a Go package) are "dir/*"
+    expect(text).toBe("cmd/* → app/b/*\nx\n");
   });
 });
 

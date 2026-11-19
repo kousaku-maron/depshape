@@ -1,5 +1,3 @@
-import { promptHeader } from "@diffshape/ui";
-
 /*
  * The AI review and fix, without the screen: what the server says can run (the shapes of
  * packages/diffshape/src/agent.ts), what the user chose, and the prompts.
@@ -53,6 +51,8 @@ export interface Compared {
   targetLabel: string;
   baseLabel: string;
   baseRev: string | null;
+  /** "diff main..feature (…)" when both sides are commits: the first line of a copied list */
+  range: string | null;
 }
 
 // ---- what the user chose: an agent for each of the two jobs, and a model and an effort for each agent
@@ -119,32 +119,35 @@ export const pick = (choice: Choice, agent: string, change: Partial<Picked>): Ch
 export interface Section {
   /** The module's id: what a review comment for it has as `module` */
   id: string;
-  description: string;
+  /** Its heading ("ファイルの差分") */
+  heading: string;
   /** What the reviewer is told about the module (CommentReport.review) */
   review?: string;
-  /** The module's open comments (CommentReport.prompt), or "" */
+  /** The module's open comments as a list (CommentReport.prompt), or "" */
   comments: string;
 }
 
-const commentSections = (sections: Section[]) => sections.filter((s) => s.comments.trim()).flatMap((s) => [`## ${s.description}`, "", s.comments.trimEnd(), ""]);
-
-/** The open comments of every module as one prompt: what "AI 用にコピー" copies */
+/**
+ * The open comments of every module, as "AI 用にコピー" copies them: like difit's list (where, then
+ * the body, "=====" between comments) under a heading for each module, after the range of a comparison
+ * of commits. No instruction: what to do with them is the reader's (or its repository's) business.
+ */
 export function commentsPrompt(c: Compared, sections: Section[]): string {
-  return [...promptHeader(c), "", ...commentSections(sections)].join("\n").trimEnd() + "\n";
+  const parts = sections.filter((s) => s.comments.trim()).map((s) => `## ${s.heading}\n\n${s.comments.trimEnd()}`);
+  return [...(c.range ? [c.range] : []), ...parts].join("\n\n") + "\n";
 }
 
-/** The comments, for an agent that edits the working tree itself */
+/** The comments, for an agent that edits the working tree itself: what to do, then the copied list as it is */
 export function fixPrompt(c: Compared, sections: Section[]): string {
   return [
-    commentsPrompt(c, sections).trimEnd(),
+    "各指摘に対応してください。",
     "",
-    "## 進め方",
-    "",
-    "- 作業ディレクトリのファイルを直接編集して、各指摘に対応してください。",
+    "- 作業ディレクトリのファイルを直接編集してください。",
     "- コミットやステージ（git add）はしないでください。",
     "- 指摘と関係のない変更はしないでください。",
-    "- 最後に、何を変えたかを日本語で短く報告してください。対応しなかった指摘があれば、その理由も書いてください。",
+    "- 最後に、何を変えたかを短く報告してください。対応しなかった指摘があれば、その理由も書いてください。",
     "",
+    commentsPrompt(c, sections),
   ].join("\n");
 }
 
@@ -154,11 +157,14 @@ function diffCommand(c: Compared): string {
   return `\`git diff ${c.baseRev}\`（まだ git に追加していない新しいファイルはこの差分に出ません。下の一覧にあるものは直接読んでください）`;
 }
 
-/** Asks for a review of the modules in `sections`, answered as comments each module can place */
+/**
+ * Asks for a review of the modules in `sections`, answered as comments each module can place. It says
+ * only what diffshape needs (read only, the answer's shape, what a comment points at); how to write the
+ * comments is left to the repository's own instructions.
+ */
 export function reviewPrompt(c: Compared, sections: Section[]): string {
   const out = [
     "あなたはコードレビュアーです。git の差分のレビュービューア diffshape から呼ばれています。次の変更をレビューして、指摘をコメントとして返してください。",
-    `リポジトリ: ${c.repoRoot}`,
     `比較: ${c.targetLabel} と ${c.baseLabel} の差分`,
     `差分の見方: ${diffCommand(c)}`,
     "",
@@ -166,13 +172,13 @@ export function reviewPrompt(c: Compared, sections: Section[]): string {
     "",
     "- 読むだけにしてください。ファイルの変更、コミット、ステージはしないでください。",
     "- 直す価値のある指摘だけを書いてください（バグ、考慮漏れ、既存の作りとの食い違い、危険な変更など）。好みの問題や細かい書き方の指摘は要りません。問題がなければ comments は空の配列にしてください。",
-    "- 1つの指摘を1つのコメントにしてください。body は日本語で、何が問題か、どう直すとよいかを具体的に書いてください。",
+    "- 1つの指摘を1つのコメントにしてください。",
     "- 「既に付いているコメント」と同じ指摘は書かないでください。",
     "- 各コメントの module には、下の見出しにある module の値を入れてください。コメントの付け方は見出しごとに違います。使わない項目は null にしてください。",
     "",
   ];
   for (const s of sections) {
-    out.push(`## ${s.description}（module: "${s.id}"）`, "", (s.review ?? "").trimEnd(), "");
+    out.push(`## ${s.heading}（module: "${s.id}"）`, "", (s.review ?? "").trimEnd(), "");
     if (s.comments.trim()) out.push("既に付いているコメント:", "", s.comments.trimEnd(), "");
   }
   return out.join("\n").trimEnd() + "\n";

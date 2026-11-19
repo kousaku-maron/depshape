@@ -45,32 +45,36 @@ describe("what the user chose", () => {
 });
 
 describe("prompts", () => {
-  const compared: Compared = { repoRoot: "/work/acme", targetLabel: "作業ディレクトリ（未コミットの変更を含む）", baseLabel: "HEAD", baseRev: "abc1234" };
+  const compared: Compared = { repoRoot: "/work/acme", targetLabel: "作業ディレクトリ（未コミットの変更を含む）", baseLabel: "HEAD", baseRev: "abc1234", range: null };
   const sections: Section[] = [
-    { id: "file", description: "ファイルの差分（fileshape）", review: "変更されたファイル（1）:\n- M src/a.ts", comments: "1. src/a.ts:L3\n   コメント: 境界を確かめる\n" },
-    { id: "db", description: "DB スキーマ（dbshape）", review: "テーブル billing.invoices", comments: "" },
+    { id: "file", heading: "ファイルの差分", review: "変更されたファイル（1）:\n- M src/a.ts", comments: "src/a.ts:L3\n境界を確かめる\n=====\nsrc/b.ts:L1 (old)\n消して大丈夫？\n" },
+    { id: "dep", heading: "依存関係", review: "依存の変化", comments: "app/x.go → example.com/app/infra\nusecase を経由する\n" },
+    { id: "db", heading: "DB スキーマ", review: "テーブル billing.invoices", comments: "" },
   ];
+  const list = "## ファイルの差分\n\nsrc/a.ts:L3\n境界を確かめる\n=====\nsrc/b.ts:L1 (old)\n消して大丈夫？\n\n## 依存関係\n\napp/x.go → example.com/app/infra\nusecase を経由する\n";
 
-  it("copies the open comments of every module that has some", () => {
-    const text = commentsPrompt(compared, sections);
-    expect(text).toContain("リポジトリ: /work/acme");
-    expect(text).toContain("## ファイルの差分（fileshape）\n\n1. src/a.ts:L3");
-    expect(text).not.toContain("dbshape");
-    expect(text.endsWith("境界を確かめる\n")).toBe(true);
+  it("copies the open comments under each module's heading, with nothing else", () => {
+    expect(commentsPrompt(compared, sections)).toBe(list);
   });
 
-  it("asks a fixing agent to edit the working tree and nothing more", () => {
+  it("names the range first for a comparison of commits", () => {
+    expect(commentsPrompt({ ...compared, range: "diff main..feature (1a2b3c4..5d6e7f8)" }, sections)).toBe(`diff main..feature (1a2b3c4..5d6e7f8)\n\n${list}`);
+  });
+
+  it("asks a fixing agent to edit the working tree and nothing more, then hands it the copied list as it is", () => {
     const text = fixPrompt(compared, sections);
-    expect(text.startsWith(commentsPrompt(compared, sections).trimEnd())).toBe(true);
+    expect(text.startsWith("各指摘に対応してください。\n")).toBe(true);
     expect(text).toContain("コミットやステージ（git add）はしないでください");
+    expect(text.endsWith(`\n\n${list}`)).toBe(true);
   });
 
   it("asks a reviewer for comments each module can place, without repeating the ones that are there", () => {
     const text = reviewPrompt(compared, sections);
     expect(text).toContain("差分の見方: `git diff abc1234`");
     expect(text).toContain("読むだけにしてください");
-    expect(text).toContain('## ファイルの差分（fileshape）（module: "file"）\n\n変更されたファイル（1）:\n- M src/a.ts\n\n既に付いているコメント:\n\n1. src/a.ts:L3');
-    expect(text).toContain('## DB スキーマ（dbshape）（module: "db"）\n\nテーブル billing.invoices\n');
+    expect(text).not.toContain("リポジトリ:");
+    expect(text).toContain('## ファイルの差分（module: "file"）\n\n変更されたファイル（1）:\n- M src/a.ts\n\n既に付いているコメント:\n\nsrc/a.ts:L3\n境界を確かめる\n=====\nsrc/b.ts:L1 (old)');
+    expect(text).toContain('## DB スキーマ（module: "db"）\n\nテーブル billing.invoices\n');
     // the staged state has no revision to name
     expect(reviewPrompt({ ...compared, baseRev: null }, sections)).toContain("差分の見方: `git diff`（ステージ済みの状態と作業ディレクトリの差分）");
   });

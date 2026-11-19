@@ -10,6 +10,7 @@ import "./styles.css";
 export const dbModule: ShapeModule<DbShapeRun> = {
   id: "db",
   title: "DB",
+  heading: "DB スキーマ",
   description: "DB スキーマ（dbshape）: テーブル・カラム・制約・CHECK の値の変化",
   icon: DatabaseIcon,
   View: DbView,

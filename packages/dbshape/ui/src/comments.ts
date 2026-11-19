@@ -1,7 +1,6 @@
-import { loadCommentList, newCommentId, promptHeader, removeKeysWithPrefix, saveCommentList, type Comparison } from "@diffshape/ui";
+import { joinEntries, loadCommentList, newCommentId, promptEntry, removeKeysWithPrefix, saveCommentList, type Comparison } from "@diffshape/ui";
 import { comparisonScope } from "./reviewed";
 import type { ColumnView, DbShapeResult, IndexView, SourceLocation, TableChange } from "../../src/model";
-import { schemaFromText } from "../../src/names";
 import { columnParts, indexText } from "./view";
 
 /*
@@ -185,27 +184,21 @@ export function newComment(data: DbShapeResult, target: CommentTarget, body: str
   };
 }
 
-const where = (l?: SourceLocation) => (l ? (l.base ? `比較元の ${l.file}:${l.line}（変更後にはありません）` : `${l.file}:${l.line}`) : undefined);
+/** "db/schema.sql:L12"; " (old)" for a part only the base side has (it was removed), like a removed line */
+const where = (l: SourceLocation) => `${l.file}:L${l.line}${l.base ? " (old)" : ""}`;
 
-export function formatPrompt(data: DbShapeResult, comments: ReviewComment[], opts: { includeResolved?: boolean; header?: boolean } = {}): { text: string; included: number; skipped: number } {
+/**
+ * Comments as a list to hand to an AI, like difit's: where each target is defined and its name on one
+ * line ("db/schema.sql:L12 カラム billing.invoices.price_id"; the name alone when the place is not known),
+ * then its body. A resolved comment is left out unless `includeResolved`.
+ */
+export function formatPrompt(data: DbShapeResult, comments: ReviewComment[], opts: { includeResolved?: boolean } = {}): { text: string; included: number; skipped: number } {
   const list = opts.includeResolved ? comments : comments.filter((c) => commentState(data, c) !== "resolved");
-  // without the header: a section of the prompt the app combines from every module
-  const out: string[] = [
-    ...(opts.header === false ? [] : [...promptHeader({ repoRoot: data.repoRoot, targetLabel: data.target.label, baseLabel: data.base.label }), "対象: DB スキーマ（dbshape）"]),
-    `スキーマの SQL: ${schemaFromText(data.schemaFrom)}`,
-    "",
-  ];
-  list.forEach((c, i) => {
-    const state = commentState(data, c);
-    const now = changeText(data, c.target);
-    out.push(`${i + 1}. ${targetLabel(c.target)}${now ? `（${now}）` : "（変更なし）"}${state === "resolved" ? "（解消済み？）" : ""}`);
-    const w = where(locationOf(data, c.target));
-    if (w) out.push(`   定義: ${w}`);
-    if (state === "updated") out.push(`   コメントしたときは: ${c.snapshot ?? "変更なし"}`);
-    out.push(`   コメント: ${c.body.trim().replace(/\n/g, "\n   ")}`);
-    out.push("");
+  const entries = list.map((c) => {
+    const at = locationOf(data, c.target);
+    return promptEntry(at ? `${where(at)} ${targetLabel(c.target)}` : targetLabel(c.target), c.body);
   });
-  return { text: out.join("\n").trimEnd() + "\n", included: list.length, skipped: comments.length - list.length };
+  return { text: joinEntries(entries), included: list.length, skipped: comments.length - list.length };
 }
 
 // ---- saved per repository and comparison, like the reviewed marks

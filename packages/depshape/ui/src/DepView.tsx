@@ -60,7 +60,7 @@ export function DepView({ data: graph, active, onComments, modules, openIn, ai, 
   // tell the shell how many comments are open, how to copy them, and what an AI reviewer is told
   useEffect(() => {
     const open = comments.filter((c) => commentState(model, tree.byPath, c) !== "resolved").length;
-    onComments({ open, prompt: () => formatPrompt(model, tree.byPath, comments, { header: false }).text, review: () => reviewSection(model, tree.byPath) });
+    onComments({ open, prompt: () => formatPrompt(model, tree.byPath, comments).text, review: () => reviewSection(model, tree.byPath) });
   }, [comments, model, tree, onComments]);
 
   // ---- an AI review: the comments for this module that point at a dependency or a file it has are

@@ -1,4 +1,4 @@
-import { HttpError, resolveSources, type Analyzer, type CompareOptions, type ResolvedSources } from "@diffshape/core";
+import { compareRange, HttpError, resolveSources, type Analyzer, type CompareOptions, type ResolvedSources } from "@diffshape/core";
 import { AgentJobs, type AgentJob, type AgentState } from "./agent.js";
 
 /*
@@ -15,6 +15,8 @@ export interface Info {
   baseLabel: string;
   /** The commit compared with, or null when it is the staged state (for `git diff <rev>` in an AI prompt) */
   baseRev: string | null;
+  /** "diff main..feature (1a2b3c4..5d6e7f8)" when both sides are commits, else null: the first line of a copied list */
+  range: string | null;
   modules: string[];
   /**
    * Set when the server was started with --clean: an id of this run. The screen clears the comments and
@@ -63,7 +65,7 @@ export class App {
 
   info(): Info {
     const { root, targetLabel, baseLabel, base } = this.sources;
-    return { repoRoot: root, targetLabel, baseLabel, baseRev: base.kind === "rev" ? base.rev : null, modules: this.analyzers.map((a) => a.id), clean: this.cleanId };
+    return { repoRoot: root, targetLabel, baseLabel, baseRev: base.kind === "rev" ? base.rev : null, range: compareRange(this.opts, this.sources), modules: this.analyzers.map((a) => a.id), clean: this.cleanId };
   }
 
   result(id: string): Promise<ModuleResult> {
