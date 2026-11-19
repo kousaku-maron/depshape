@@ -1,4 +1,4 @@
-import { BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CommentIcon, loadCommentList, loadJSON, ModuleBar, ReviewProgress, saveCommentList, saveJSON, useStoredSet, StatusCounts, type AiPlaced, type ModuleViewProps } from "@diffshape/ui";
+import { BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CommentIcon, FIND_LIMIT, FindBar, findIndex, loadCommentList, loadJSON, ModuleBar, ReviewProgress, saveCommentList, saveJSON, useFind, useStoredSet, StatusCounts, type AiPlaced, type ModuleViewProps } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiffGraph, Edge, FileNode } from "../../src/types";
 import { commentState, formatPrompt, type ReviewComment } from "./comments";
@@ -8,7 +8,7 @@ import { loadPref, savePref } from "./prefs";
 import { reviewSection, toComments } from "./review";
 import { commentKey as commentKeyOf, loadReviewed, reviewedFiles, reviewScope, reviewTargets, saveReviewed } from "./reviewed";
 import { DEP_TITLE } from "./depTitle";
-import type { MapMode } from "./view";
+import { findItems, type MapMode } from "./view";
 
 export function DepView({ data: graph, active, onComments, modules, openIn, ai, onAi }: ModuleViewProps<DiffGraph>) {
   const repo = graph.repoRoot;
@@ -95,6 +95,31 @@ export function DepView({ data: graph, active, onComments, modules, openIn, ai, 
       }),
     [setCollapsed],
   );
+  // ---- ⌘F: folders and files by name, among what the tree's view can show; the folders above the
+  // one found are opened (全体) or unfolded (変更)
+  const find = useFind(active);
+  const found = useMemo(
+    () => (find.open ? findItems(model, tree.root, mapMode, find.query, find.caseSensitive, FIND_LIMIT) : []),
+    [model, tree, mapMode, find.open, find.query, find.caseSensitive],
+  );
+  const findItem = found[findIndex(find, found.length)] ?? null;
+  const reveal = useCallback(
+    (dirs: string[]) => {
+      if (mapMode === "all") setExpanded((prev) => (dirs.every((d) => prev.has(d)) ? prev : new Set([...prev, ...dirs])));
+      else
+        setCollapsed((prev) => {
+          if (!dirs.some((d) => prev.has(d))) return prev;
+          const next = new Set(prev);
+          for (const d of dirs) next.delete(d);
+          return next;
+        });
+    },
+    [mapMode, setExpanded, setCollapsed],
+  );
+  useEffect(() => {
+    if (find.open && findItem) reveal(findItem.reveal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find.seq]);
   const pinMany = useCallback((ids: string[]) => setPins((prev) => [...prev, ...ids.filter((id) => !prev.includes(id))]), []);
   const togglePin = useCallback((id: string) => setPins((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id])), []);
 
@@ -162,6 +187,7 @@ export function DepView({ data: graph, active, onComments, modules, openIn, ai, 
           <ChangeCounts stats={depCounts} title={DEP_TITLE(depCounts)} showZero />
         </BarCounts>
         <BarSpacer />
+        <FindBar find={find} count={found.length} placeholder="ファイル名・フォルダ名を検索" />
         <ReviewProgress done={reviewed.size} total={targets.size} title="確認済みにした、変更したファイル（そのファイルの依存がまた変わると外れます）" />
         <button className={`ds-btn${sidebarOpen ? " on" : ""}`} onClick={() => setSidebarOpen(!sidebarOpen)} title="コメントのサイドバーを開閉">
             <CommentIcon size={13} />
@@ -183,6 +209,8 @@ export function DepView({ data: graph, active, onComments, modules, openIn, ai, 
           onToggle={toggleDir}
           collapsed={collapsed}
           onCollapseToggle={toggleCollapsed}
+          find={find}
+          findItem={findItem}
           onFold={fold}
           pins={pins}
           onTogglePin={togglePin}

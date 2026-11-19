@@ -6,7 +6,8 @@ export { CommentCard, CommentComposer, type CommentCardProps, type CommentCompos
 export { COMMENT_STATE_LABEL, loadCommentList, joinEntries, newCommentId, promptEntry, saveCommentList, type CommentStateName } from "./comments";
 export { hashOf } from "./hash";
 export { ChangeCounts, STATUS_LABEL, StatusCounts, StatusMark, type ChangeStats, type MarkStatus, type StatusStats } from "./Stats";
-export { AiIcon, CheckIcon, ChevronIcon, CommentIcon, CopyIcon, DatabaseIcon, EyeIcon, FileIcon, GraphIcon, PinIcon, RefreshIcon } from "./icons";
+export { AiIcon, CheckIcon, ChevronIcon, CommentIcon, CopyIcon, DatabaseIcon, SearchIcon, EyeIcon, FileIcon, GraphIcon, PinIcon, RefreshIcon } from "./icons";
 export type { AiBatch, AiComment, AiPlaced, CommentReport, Comparison, ModuleViewProps, OpenRequest, ShapeModule } from "./module";
 export { loadJSON, loadPref, removeKey, removeKeysWithPrefix, saveJSON, savePref, useStoredSet } from "./storage";
 export { BarCounts, BarLabel, BarSep, BarSpacer, ModuleBar, ReviewProgress } from "./ModuleBar";
+export { FIND_LIMIT, FindBar, findAll, findIndex, useFind, useFindHighlight, type Find, type FindTarget } from "./find";

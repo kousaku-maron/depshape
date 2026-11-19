@@ -213,7 +213,9 @@ export const DiffTable = memo(function DiffTable({ file, mode, rows, tokens, byL
                   {!plain && num("old", l.type === "add" ? undefined : l)}
                   {num("new", l.type === "delete" ? undefined : l)}
                   <td className="fs-sign">{l.type === "add" ? "+" : l.type === "delete" ? "-" : " "}</td>
-                  <td className="fs-code">{code(side, l)}</td>
+                  <td className="fs-code" data-find={`${side}:${numOf(side, l)}`}>
+                    {code(side, l)}
+                  </td>
                 </tr>
                 {thread(keys, cols)}
               </Fragment>
@@ -239,10 +241,14 @@ export const DiffTable = memo(function DiffTable({ file, mode, rows, tokens, byL
           <tr className={`fs-line${p.old && opened.has(p.old) ? " opened" : ""}`}>
             {num("old", p.old)}
             <td className={`fs-sign ${cls(p.old, "old")}`}>{p.old?.type === "delete" ? "-" : " "}</td>
-            <td className={`fs-code ${cls(p.old, "old")}`}>{p.old && code("old", p.old)}</td>
+            <td className={`fs-code ${cls(p.old, "old")}`} data-find={p.old ? `old:${p.old.oldLine}` : undefined}>
+              {p.old && code("old", p.old)}
+            </td>
             {num("new", p.new)}
             <td className={`fs-sign ${cls(p.new, "new")}`}>{p.new?.type === "add" ? "+" : " "}</td>
-            <td className={`fs-code ${cls(p.new, "new")}`}>{p.new && code("new", p.new)}</td>
+            <td className={`fs-code ${cls(p.new, "new")}`} data-find={p.new ? `new:${p.new.newLine}` : undefined}>
+              {p.new && code("new", p.new)}
+            </td>
           </tr>
           {thread(keys, 6)}
         </Fragment>,

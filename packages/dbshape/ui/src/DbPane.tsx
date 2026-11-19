@@ -1,16 +1,16 @@
-import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CheckIcon, CommentCount, CommentIcon, ModuleBar, ReviewProgress, StatusCounts, useWidth, type AiBatch, type AiPlaced, type CommentReport } from "@diffshape/ui";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, CheckIcon, CommentCount, CommentIcon, FIND_LIMIT, FindBar, findIndex, ModuleBar, ReviewProgress, StatusCounts, useFind, useFindHighlight, useWidth, type AiBatch, type AiPlaced, type CommentReport } from "@diffshape/ui";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { schemaFromText } from "../../src/names";
 import type { DbShapeResult, DomainChange, EnumChange, TableChange } from "../../src/model";
 import { commentState, formatPrompt, loadComments, newComment, saveComments, targetId, targetLabel, type CommentTarget, type ReviewComment } from "./comments";
 import { CommentsContext, STATE_LABEL, type CommentsApi } from "./CommentViews";
 import { Details, type Selection } from "./Details";
 import { ErDiagram, type ErDiagramHandle } from "./ErDiagram";
-import type { Mode } from "./erLayout";
+import { pickTables, type Mode } from "./erLayout";
 import { clampLayout, DEFAULT_LAYOUT, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { reviewList, toComments } from "./review";
 import { comparisonScope, loadReviewed, saveReviewed } from "./reviewed";
-import { changeTitle, hashOf, matchesFilter, tableStats, valueChips, valueTarget, type Status } from "./view";
+import { changeTitle, findSchema, hashOf, matchesFilter, tableStats, valueChips, valueTarget, type Status } from "./view";
 
 /** Reviewed marks are kept per repository and comparison */
 const scopeOf = (d: DbShapeResult) => comparisonScope({ repoRoot: d.repoRoot, baseLabel: d.base.label, targetLabel: d.target.label }) + d.database.id;
@@ -48,7 +48,12 @@ export function DbPane({ data, active, onComments, ai, aiPrefix, onAi, switcher 
   const [editing, setEditing] = useState<string | null>(null);
   const diagram = useRef<ErDiagramHandle>(null);
   // area widths: dragged on the lines between them, saved for next time
-  const bodyRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [bodyEl, setBodyEl] = useState<HTMLDivElement | null>(null);
+  const bodyRefCb = useCallback((el: HTMLDivElement | null) => {
+    bodyRef.current = el;
+    setBodyEl(el);
+  }, []);
   const sideRef = useRef<HTMLElement>(null);
   const bodyW = useWidth(bodyRef);
   const [layout, setLayout] = useState<Layout>(loadLayout);
@@ -175,6 +180,43 @@ export function DbPane({ data, active, onComments, ai, aiPrefix, onAi, switcher 
     ...d.domains.map((e) => ({ kind: "DOMAIN" as const, change: e as EnumChange | DomainChange })),
   ];
   const reviewedCount = tables.filter(isReviewed).length;
+
+  // ---- ⌘F: tables, columns and types by name, unchanged tables too. A table is selected (its details
+  // open) and the diagram pans to it, switching to 全体 when the current view does not show it
+  const find = useFind(active);
+  const typeNames = useMemo(() => [...d.enums, ...d.domains].map((t) => t.name), [d]);
+  const hits = useMemo(
+    () => (find.open ? findSchema(data.er, typeNames, find.query, find.caseSensitive, FIND_LIMIT) : []),
+    [data, typeNames, find.open, find.query, find.caseSensitive],
+  );
+  const hit = hits[findIndex(find, hits.length)] ?? null;
+  useEffect(() => {
+    if (!find.open || !hit) return;
+    if (hit.kind === "type") {
+      setSelection({ kind: "type", name: hit.name });
+      return;
+    }
+    if (!pickTables(data.er, mode).some((p) => p.table.name === hit.table)) setMode("all");
+    setSelection({ kind: "table", name: hit.table });
+    // once the details panel has taken its width (and the diagram is there, after a switch to 全体)
+    window.setTimeout(() => diagram.current?.focus(hit.table, hit.kind === "column" ? hit.column : undefined, true), 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find.seq]);
+  useFindHighlight({
+    root: bodyEl,
+    selector: ".side .iname, .panel-title, .panel .cname",
+    find,
+    on: active,
+    current: () => {
+      if (!hit || !bodyEl) return null;
+      const el =
+        hit.kind === "column"
+          ? [...bodyEl.querySelectorAll(".panel .cname")].find((x) => x.textContent === hit.column)
+          : bodyEl.querySelector(".panel-title");
+      return el ? { el, nth: 0 } : null;
+    },
+  });
+  const found = find.open && hit && hit.kind !== "type" ? { table: hit.table, column: hit.kind === "column" ? hit.column : undefined } : null;
   const sel = selection;
   const selChange = sel?.kind === "table" ? tables.find((t) => t.name === sel.name) : undefined;
   const selEr = sel?.kind === "table" ? data.er.find((t) => t.name === sel.name) : undefined;
@@ -205,10 +247,11 @@ export function DbPane({ data, active, onComments, ai, aiPrefix, onAi, switcher 
             </span>
           </BarCounts>
           <BarSpacer />
+          <FindBar find={find} count={hits.length} placeholder="テーブル名・カラム名を検索" />
           <ReviewProgress done={reviewedCount} total={tables.length} title="確認済みにしたテーブル（内容が変わると外れます）" />
         </ModuleBar>
 
-        <div className={`body ${sel ? "with-panel" : ""}`} ref={bodyRef} style={{ gridTemplateColumns: gridColumns(bodyW ? clampLayout(layout, bodyW, !!sel) : layout, !!sel) }}>
+        <div className={`body ${sel ? "with-panel" : ""}`} ref={bodyRefCb} style={{ gridTemplateColumns: gridColumns(bodyW ? clampLayout(layout, bodyW, !!sel) : layout, !!sel) }}>
           <nav className="side" ref={sideRef}>
             <input className="filter" placeholder="テーブル・カラムで絞り込み" value={filter} onChange={(e) => setFilter(e.target.value)} />
             {GROUPS.map((g) => {
@@ -391,6 +434,7 @@ export function DbPane({ data, active, onComments, ai, aiPrefix, onAi, switcher 
                 reviewed={reviewedSet}
                 comments={commentMarks}
                 onSelect={(name) => (name ? selectTable(name, false) : setSelection(null))}
+                found={found}
               />
             )}
           </main>

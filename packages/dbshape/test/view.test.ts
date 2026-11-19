@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { TableChange } from "../src/model.js";
-import { columnBadges, hashOf, indexText, matchesFilter, sideConstraints, tableStats, valueChips } from "../ui/src/view.js";
+import type { ErTable, TableChange } from "../src/model.js";
+import { columnBadges, findSchema, hashOf, indexText, matchesFilter, sideConstraints, tableStats, valueChips } from "../ui/src/view.js";
 
 const table: TableChange = {
   name: "billing.invoices",
@@ -64,5 +64,35 @@ describe("view helpers", () => {
     expect(matchesFilter(table, "INVOICE")).toBe(true);
     expect(matchesFilter(table, "legacy")).toBe(true);
     expect(matchesFilter(table, "orders")).toBe(false);
+  });
+});
+
+describe("findSchema", () => {
+  const er = (name: string, columns: string[]): ErTable => {
+    const [schema, table] = name.split(".");
+    return {
+      name,
+      schema,
+      table,
+      status: "unchanged",
+      columns: columns.map((c) => ({ name: c, type: "text", status: "unchanged", notNull: false, primary: false })),
+      foreignKeys: [],
+      otherChanges: { constraints: 0, indexes: 0, comment: false },
+    };
+  };
+  const tables = [er("public.users", ["id", "user_name"]), er("public.orders", ["id", "user_id"])];
+
+  it("finds tables, then their columns, then types, by a part of the name", () => {
+    expect(findSchema(tables, ["public.user_role"], "USER", false)).toEqual([
+      { kind: "table", table: "public.users" },
+      { kind: "column", table: "public.users", column: "user_name" },
+      { kind: "column", table: "public.orders", column: "user_id" },
+      { kind: "type", name: "public.user_role" },
+    ]);
+  });
+
+  it("can tell upper and lower case apart, and finds nothing for an empty query", () => {
+    expect(findSchema(tables, [], "USER", true)).toEqual([]);
+    expect(findSchema(tables, [], "", false)).toEqual([]);
   });
 });

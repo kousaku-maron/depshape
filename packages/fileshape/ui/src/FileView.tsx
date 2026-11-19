@@ -1,4 +1,4 @@
-import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, DIVIDER_W, loadJSON, loadPref, ModuleBar, ReviewProgress, saveJSON, savePref, StatusCounts, type AiPlaced, type ModuleViewProps } from "@diffshape/ui";
+import { AreaDivider, BarCounts, BarLabel, BarSep, BarSpacer, ChangeCounts, DIVIDER_W, FIND_LIMIT, FindBar, findAll, findIndex, loadJSON, loadPref, ModuleBar, ReviewProgress, saveJSON, savePref, StatusCounts, useFind, useFindHighlight, type AiPlaced, type ModuleViewProps } from "@diffshape/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiffFile, FileShapeRun } from "../../src/types";
 import { fetchContent, fetchFileList, fetchPlain } from "./api";
@@ -8,7 +8,7 @@ import type { ViewMode } from "./DiffTable";
 import { FileBlock, LARGE_LINES, previewOf, type FileViewKind } from "./FileBlock";
 import { FileTree, type TreeMode } from "./FileTree";
 import { loadReviewed, reviewedFiles, reviewScope, reviewTargets, saveReviewed } from "./reviewed";
-import { buildTree, canExpand, countLines, countStatus, expand, filesInTreeOrder, gapsOf, lineCount, oldToNew, reveal, unchangedFile, type Expansion, type Gap } from "./model";
+import { buildRows, buildTree, canExpand, countLines, countStatus, expand, filesInTreeOrder, gapsOf, lineCount, oldToNew, reveal, unchangedFile, type Expansion, type Gap } from "./model";
 import { fileFor, placeItem, reviewSection } from "./review";
 
 /*
@@ -352,8 +352,10 @@ export function FileView({ data: diff, active, onComments, request, ai, onAi }: 
 
   // jumping to a file: the files passed on the way are drawn as they come near and grow past their
   // placeholders, so the jump keeps its file at the top until the page stops moving (or the user scrolls)
+  // A line (`key`, its data-find "new:12") is brought to a third of the way down instead; while it
+  // is not drawn yet, its file is brought up so it comes near and draws
   const pin = useRef<{ stop: () => void } | null>(null);
-  const select = (path: string) => {
+  const select = (path: string, key?: string) => {
     if (!isOpen(path)) setFolds((prev) => ({ ...prev, [path]: true }));
     setCurrent(path);
     pin.current?.stop();
@@ -370,16 +372,20 @@ export function FileView({ data: diff, active, onComments, request, ai, onAi }: 
       pin.current = null;
     };
     const step = () => {
-      const el = blocks.current.get(path);
+      const block = blocks.current.get(path);
+      const line = key ? block?.querySelector(`[data-find="${key}"]`) : null;
+      const el = line ?? block;
       if (el) {
+        const top = el.getBoundingClientRect().top - root.getBoundingClientRect().top;
         // the file's header sticks below the list's top padding: line the file up there, or the header covers its first line
-        const off = el.getBoundingClientRect().top - root.getBoundingClientRect().top - (parseFloat(getComputedStyle(root).paddingTop) || 0);
+        const off = line ? top - root.clientHeight / 3 : top - (parseFloat(getComputedStyle(root).paddingTop) || 0);
         // the last files can not reach the top: stop once the scroll is at its end
         const atEnd = root.scrollTop + root.clientHeight >= root.scrollHeight - 1;
-        if (Math.abs(off) > 1 && !(atEnd && off > 0)) {
+        const atStart = root.scrollTop <= 0;
+        if (Math.abs(off) > 1 && !(atEnd && off > 0) && !(atStart && off < 0)) {
           root.scrollTop += off;
           still = 0;
-        } else still++;
+        } else if (!key || line) still++;
       }
       if (still > 10 || performance.now() - started > 1500) return stop();
       frame = requestAnimationFrame(step);
@@ -410,6 +416,48 @@ export function FileView({ data: diff, active, onComments, request, ai, onAi }: 
     openFile(f ? f.path : request.target);
   });
 
+  // ---- ⌘F: file paths (as their header shows them) and the text of every line the list has, folded
+  // files too; each occurrence is one match, in the list's order
+  const find = useFind(active);
+  const hits = useMemo(() => {
+    const out: { path: string; key: string | null; nth: number }[] = [];
+    if (!find.open || !find.query) return out;
+    const add = (path: string, key: string | null, text: string) => {
+      findAll(text, find.query, find.caseSensitive, FIND_LIMIT - out.length).forEach((_, nth) => out.push({ path, key, nth }));
+    };
+    for (const f of files) {
+      add(f.path, null, f.oldPath ? `${f.oldPath} → ${f.path}` : f.path);
+      for (const r of buildRows(f, contents.get(f.path), expansions[f.path] ?? NO_EXPANSION)) {
+        if (out.length >= FIND_LIMIT) return out;
+        if (r.kind !== "line") continue;
+        const l = r.line;
+        // the cell the line is drawn in (see DiffTable): a deleted line on the base side, others on the target side
+        add(f.path, l.type === "delete" ? `old:${l.oldLine}` : `new:${l.newLine}`, l.content);
+      }
+    }
+    return out;
+  }, [files, contents, expansions, find.open, find.query, find.caseSensitive]);
+  const hit = hits[findIndex(find, hits.length)] ?? null;
+  useEffect(() => {
+    if (!find.open || !hit) return;
+    // a line of a Markdown file shown as its preview: back to its lines
+    if (hit.key && views[hit.path] === "preview") onView(hit.path, "diff");
+    select(hit.path, hit.key ?? undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find.seq]);
+  useFindHighlight({
+    root: scrollRoot,
+    selector: ".fs-code, .fs-file-path",
+    find,
+    on: active,
+    current: () => {
+      if (!hit) return null;
+      const block = blocks.current.get(hit.path);
+      const el = block?.querySelector(hit.key ? `[data-find="${hit.key}"]` : ".fs-file-path");
+      return el ? { el, nth: hit.nth } : null;
+    },
+  });
+
   // ---- sidebar width
   const [treeW, setTreeW] = useState(() => loadJSON<number>(TREE_W_KEY, TREE_W));
   const rootRef = useRef<HTMLDivElement>(null);
@@ -429,6 +477,7 @@ export function FileView({ data: diff, active, onComments, request, ai, onAi }: 
             <ChangeCounts stats={lines} title={`追加 ${lines.added} 行・削除 ${lines.removed} 行`} showZero />
           </BarCounts>
           <BarSpacer />
+          <FindBar find={find} count={hits.length} placeholder="ファイル名・コードを検索" />
           <ReviewProgress done={reviewed.size} total={targets.size} title="確認済みにしたファイル（そのファイルがまた変わると外れます）" />
           <div className="ds-seg" role="radiogroup" aria-label="表示">
             {(

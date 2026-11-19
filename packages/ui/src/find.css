@@ -1,0 +1,109 @@
+/*
+ * The ⌘F box (find.tsx): floats over the module's top right, just under its bar (the bar is the box's
+ * parent, so the box stays under it when the bar wraps onto two rows)
+ */
+
+.ds-find {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 16px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow:
+    0 0 0 1px rgba(15, 15, 15, 0.04),
+    0 4px 12px rgba(15, 15, 15, 0.12),
+    0 12px 32px rgba(15, 15, 15, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ds-find {
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.3),
+      0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.ds-find-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.ds-find-input {
+  width: 220px;
+  height: 26px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ds-find-input:focus {
+  outline: none;
+}
+
+.ds-find-count {
+  min-width: 56px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ds-find-count.none {
+  color: var(--removed);
+}
+
+.ds-find-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs);
+  cursor: pointer;
+}
+
+.ds-find-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.ds-find-btn:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.ds-find-case {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.ds-find-case.on {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* the matches drawn on screen, and the current one */
+::highlight(ds-find) {
+  background-color: rgba(255, 210, 0, 0.45);
+}
+
+::highlight(ds-find-current) {
+  background-color: #ff9632;
+  color: #1f2328;
+}
