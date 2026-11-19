@@ -1,14 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { CommentSidebar, type Draft } from "./CommentViews";
 import { commentState, itemKey, parseKey, type ReviewComment } from "./comments";
 import { DepPanel } from "./DepPanel";
-import { AreaDivider, ChangeCounts, ChevronIcon, CommentCount, CommentIcon, FileIcon, PinIcon, StatusMark, useWidth, type ChangeStats } from "@diffshape/ui";
+import { AreaDivider, ChangeCounts, ChevronIcon, CommentCount, CommentIcon, FileIcon, findAll, PinIcon, StatusMark, useFindHighlight, useWidth, type ChangeStats, type Find } from "@diffshape/ui";
 import { unhide } from "./hide";
 import { clampLayout, DEFAULT_SIDE, gridColumns, loadLayout, saveLayout, type Layout } from "./layout";
 import { parentDir, type Model, type TreeDir } from "./model";
 import { folderReviewed } from "./reviewed";
 import { DEP_TITLE } from "./depTitle";
-import { buildAllView, buildChangesView, pathOf, type MapMode, type View, type ViewNode } from "./view";
+import { buildAllView, buildChangesView, dirId, fileId, pathOf, rowsOf, type FindItem, type MapMode, type View, type ViewNode } from "./view";
 
 /*
  * The dependency map: a file tree on the left (no arrows), and a panel on the
@@ -27,6 +27,9 @@ export interface DepMapProps {
   /** "changes" mode: folders folded away by the user */
   collapsed: Set<string>;
   onCollapseToggle: (dir: string) => void;
+  /** ⌘F, and the folder or file it is on now (its folders are opened by the caller) */
+  find: Find;
+  findItem: FindItem | null;
   /**
    * The fold button. `close`: close every folder (`shown` = the open folders on screen); otherwise open
    * them again ("全体": the folders with changes, "変更": everything)
@@ -81,7 +84,12 @@ export function DepMap(props: DepMapProps) {
   const fileModule = !!props.onOpenFile;
   const [hovered, setHovered] = useState<string | null>(null);
   const clearTimer = useRef<number | undefined>(undefined);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [treeEl, setTreeEl] = useState<HTMLDivElement | null>(null);
+  const treeRef = useCallback((el: HTMLDivElement | null) => {
+    scrollRef.current = el;
+    setTreeEl(el);
+  }, []);
   const treeColRef = useRef<HTMLElement>(null);
   // area widths: dragged on the dividers, saved for next time
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -301,6 +309,44 @@ export function DepMap(props: DepMapProps) {
     else props.onToggle(n.path);
   };
 
+  // ---- ⌘F: the row found is scrolled to the middle and (a file) shown in the panel as if hovered
+  const { find, findItem: item } = props;
+  const rows = useMemo(() => rowsOf(view), [view]);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const rowOf = (it: FindItem) => rowsRef.current.get(it.kind === "file" ? fileId(it.path) : dirId(it.path));
+  useEffect(() => {
+    if (!find.open || !item) return;
+    // the row shows once the folders above it have opened
+    let tries = 0;
+    let frame = 0;
+    const step = () => {
+      const r = rowOf(item);
+      const el = r && rowEl(r.id);
+      const sc = scrollRef.current;
+      if (r && el && sc) {
+        sc.scrollTop += offsetIn(el, sc) - sc.clientHeight / 2;
+        if (item.kind === "file") hover(r.id);
+      } else if (++tries < 30) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find.seq]);
+  useFindHighlight({
+    root: treeEl,
+    selector: ".tlabel",
+    find,
+    on: props.active,
+    current: () => {
+      const r = item && rowOf(item);
+      const el = r && rowEl(r.id)?.querySelector(".tlabel");
+      if (!r || !el) return null;
+      // a row of several folders ("apps/api/"): the occurrence inside this folder's name
+      return { el, nth: findAll(el.textContent ?? "", find.query, find.caseSensitive).filter((s) => s < r.offset).length };
+    },
+  });
+
   const abs = (p: string) => (p ? `${model.graph.repoRoot}/${p}` : model.graph.repoRoot);
 
   /** A folder's changed files, now that its row shows one status letter instead of the counts */
@@ -469,7 +515,7 @@ export function DepMap(props: DepMapProps) {
               {foldOpen ? "−" : "＋"}
             </button>
           </div>
-          <div className="map-scroll tree" ref={scrollRef} onMouseLeave={releaseHover}>
+          <div className="map-scroll tree" ref={treeRef} onMouseLeave={releaseHover}>
             {renderNodes(view.roots)}
           </div>
         </aside>

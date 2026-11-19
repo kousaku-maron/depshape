@@ -13,12 +13,15 @@ interface Props {
   /** Open comments per table, and the columns ("schema.table.column") that have one */
   comments: { tables: ReadonlyMap<string, number>; columns: ReadonlySet<string> };
   onSelect: (table: string | null) => void;
+  /** What ⌘F found: a table, or a column of it, marked until the search moves on */
+  found: { table: string; column?: string } | null;
 }
 
 export interface ErDiagramHandle {
   fit: () => void;
   zoom: (factor: number) => void;
-  focus: (table: string) => void;
+  /** Pans to a table (a column of it, its folded columns opened first when it is among them); `zoom` makes small text readable */
+  focus: (table: string, column?: string, zoom?: boolean) => void;
 }
 
 const FONT = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
@@ -41,7 +44,7 @@ interface View {
   k: number;
 }
 
-export const ErDiagram = forwardRef<ErDiagramHandle, Props>(function ErDiagram({ tables, mode, values, selected, reviewed, comments, onSelect }, ref) {
+export const ErDiagram = forwardRef<ErDiagramHandle, Props>(function ErDiagram({ tables, mode, values, selected, reviewed, comments, onSelect, found }, ref) {
   const measure = useMeasure();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<string | null>(null);
@@ -98,14 +101,9 @@ export const ErDiagram = forwardRef<ErDiagramHandle, Props>(function ErDiagram({
         const el = box.current;
         if (el) zoomAt(f, el.clientWidth / 2, el.clientHeight / 2);
       },
-      focus: (name) => {
-        const t = byName.get(name);
-        const el = box.current;
-        if (!t || !el) return;
-        setView((v) => ({ ...v, x: el.clientWidth / 2 - (t.x + t.width / 2) * v.k, y: el.clientHeight / 3 - (t.y + Math.min(t.height, 200) / 2) * v.k }));
-      },
+      focus: (name, column, zoom = false) => setFocusing({ name, column, zoom }),
     }),
-    [fit, zoomAt, byName],
+    [fit, zoomAt],
   );
 
   // wheel: pan, ⌘ / Ctrl + wheel (and trackpad pinch): zoom; a native listener so preventDefault works
@@ -121,6 +119,31 @@ export const ErDiagram = forwardRef<ErDiagramHandle, Props>(function ErDiagram({
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
+
+  // a focus asked for is done once the diagram has the table (and the column's row: a folded one is
+  // opened first); after the fit above, so a mode switch that fits does not undo it
+  const [focusing, setFocusing] = useState<{ name: string; column?: string; zoom: boolean } | null>(null);
+  useEffect(() => {
+    if (!focusing) return;
+    const t = byName.get(focusing.name);
+    const el = box.current;
+    let rowY: number | undefined;
+    if (t && focusing.column) {
+      const i = t.rows.findIndex((r) => r.kind === "column" && r.column.name === focusing.column);
+      if (i >= 0) rowY = t.y + HEADER_H + i * ROW_H + ROW_H / 2;
+      else if (!expanded.has(t.table.name)) {
+        setExpanded((s) => new Set(s).add(t.table.name));
+        return;
+      }
+    }
+    setFocusing(null);
+    if (!t || !el) return;
+    const y = rowY ?? t.y + Math.min(t.height, 200) / 2;
+    setView((v) => {
+      const k = focusing.zoom ? Math.max(v.k, 0.9) : v.k;
+      return { k, x: el.clientWidth / 2 - (t.x + t.width / 2) * k, y: el.clientHeight / 3 - y * k };
+    });
+  }, [focusing, byName, expanded]);
 
   const lit = (name: string) => hovered === name || selected === name;
 
@@ -204,6 +227,7 @@ export const ErDiagram = forwardRef<ErDiagramHandle, Props>(function ErDiagram({
                 comments={comments.tables.get(t.table.name) ?? 0}
                 commented={comments.columns}
                 expanded={expanded.has(t.table.name)}
+                found={found?.table === t.table.name ? (found.column ?? true) : undefined}
                 onHover={setHovered}
               />
             ))}
@@ -222,6 +246,7 @@ function TableNode({
   comments,
   commented,
   expanded,
+  found,
   onHover,
 }: {
   t: DiagramTable;
@@ -231,12 +256,14 @@ function TableNode({
   comments: number;
   commented: ReadonlySet<string>;
   expanded: boolean;
+  /** ⌘F found this table (true) or this column of it */
+  found: true | string | undefined;
   onHover: (n: string | null) => void;
 }) {
   const s = t.table.status;
   return (
     <g
-      className={`er-table ${s} ${t.neighbor ? "neighbor" : ""} ${selected ? "selected" : ""} ${reviewed ? "reviewed" : ""}`}
+      className={`er-table ${s} ${t.neighbor ? "neighbor" : ""} ${selected ? "selected" : ""} ${reviewed ? "reviewed" : ""} ${found === true ? "found" : ""}`}
       data-table={t.table.name}
       transform={`translate(${t.x} ${t.y})`}
       onPointerEnter={() => onHover(t.table.name)}
@@ -270,7 +297,7 @@ function TableNode({
         const text = rowText(c);
         const value = values.get(`${t.table.name}.${c.name}`);
         return (
-          <g key={c.name} className={`er-row ${c.status}`}>
+          <g key={c.name} className={`er-row ${c.status}${found === c.name ? " found" : ""}`}>
             <rect y={y} width={t.width} height={ROW_H} />
             <text x={8} y={y + 14} className={`er-mark ${c.status}`}>
               {STATUS_MARK[c.status]}

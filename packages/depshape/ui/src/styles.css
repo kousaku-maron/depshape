@@ -722,3 +722,8 @@ main {
   background: var(--border);
 }
 }
+
+/* ⌘F: the row of the current match */
+[data-module="dep"] .trow:has(> .tlabel[data-find-current]) {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}

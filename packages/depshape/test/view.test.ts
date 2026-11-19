@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DiffGraph, Edge, FileNode } from "../src/types";
 import { buildModel, buildTree } from "../ui/src/model";
-import { buildAllView, buildChangesView, type ViewNode } from "../ui/src/view";
+import { buildAllView, buildChangesView, findItems, rowsOf, type ViewNode } from "../ui/src/view";
 
 function file(path: string, status: FileNode["status"] = "unchanged"): FileNode {
   const dir = path.slice(0, path.lastIndexOf("/"));
@@ -87,5 +87,33 @@ describe("buildAllView", () => {
     expect(outline(v.roots)).toEqual(["app(open)", "  cmd(dir)", "  internal(dir)"]);
     expect(v.fileRep.get("app/internal/handler/a.go")).toBe("d:app/internal");
     expect(v.pkgRep.get("app/internal/usecase")).toBe("d:app/internal");
+  });
+});
+
+describe("findItems", () => {
+  it("changes: looks among the changed files and their folders, by name, in the tree's order", () => {
+    expect(findItems(model, root, "changes", "a", false)).toEqual([
+      { kind: "dir", path: "app", reveal: [] },
+      { kind: "dir", path: "app/internal", reveal: ["app"] },
+      { kind: "dir", path: "app/internal/handler", reveal: ["app", "app/internal"] },
+    ]);
+    // unchanged files are not in that view
+    expect(findItems(model, root, "changes", "a.go", false)).toEqual([]);
+  });
+
+  it("all: looks through the whole repository; a file reveals every folder above it", () => {
+    expect(findItems(model, root, "all", "A.GO", false)).toEqual([{ kind: "file", path: "app/internal/handler/a.go", reveal: ["app", "app/internal", "app/internal/handler"] }]);
+    expect(findItems(model, root, "all", "A.GO", true)).toEqual([]);
+    expect(findItems(model, root, "all", "", false)).toEqual([]);
+  });
+});
+
+describe("rowsOf", () => {
+  it("a chain folded into one row shows each of its folders, at where its name starts", () => {
+    const rows = rowsOf(buildChangesView(model, root));
+    expect(rows.get("d:app")).toEqual({ id: "d:app/internal/handler", offset: 0 });
+    expect(rows.get("d:app/internal")).toEqual({ id: "d:app/internal/handler", offset: 4 });
+    expect(rows.get("d:app/internal/handler")).toEqual({ id: "d:app/internal/handler", offset: 13 });
+    expect(rows.get("f:app/internal/handler/new.go")).toEqual({ id: "f:app/internal/handler/new.go", offset: 0 });
   });
 });

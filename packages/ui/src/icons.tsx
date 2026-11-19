@@ -195,6 +195,16 @@ export function FileIcon(p: OutlineProps) {
   );
 }
 
+/** Feather "search": the ⌘F box */
+export function SearchIcon({ size = 14, ...p }: OutlineProps) {
+  return (
+    <Outline size={size} {...p}>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </Outline>
+  );
+}
+
 /** Feather "chevron-down" (turned with CSS for a closed state) */
 export function ChevronIcon({ size = 14, ...p }: OutlineProps) {
   return (

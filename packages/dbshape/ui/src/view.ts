@@ -1,4 +1,4 @@
-import type { ColumnView, ConstraintView, IndexView, TableChange, ValueChange } from "../../src/model";
+import type { ColumnView, ConstraintView, ErTable, IndexView, TableChange, ValueChange } from "../../src/model";
 
 /* Pure helpers for the view (kept free of React so they can be tested). */
 
@@ -105,3 +105,24 @@ export function matchesFilter(t: TableChange, q: string): boolean {
   return t.name.toLowerCase().includes(s) || t.columns.some((c) => c.name.toLowerCase().includes(s));
 }
 
+
+/** Something ⌘F found: a table ("schema.table"), a column of one, or an ENUM / DOMAIN type */
+export type FindHit = { kind: "table"; table: string } | { kind: "column"; table: string; column: string } | { kind: "type"; name: string };
+
+/**
+ * The tables, columns and types whose name holds the query: every table of the schema (unchanged ones
+ * too), each followed by its columns, then the types that changed.
+ */
+export function findSchema(tables: ErTable[], types: string[], query: string, caseSensitive: boolean, limit = Infinity): FindHit[] {
+  const out: FindHit[] = [];
+  if (!query) return out;
+  const q = caseSensitive ? query : query.toLowerCase();
+  const has = (name: string) => (caseSensitive ? name : name.toLowerCase()).includes(q);
+  for (const t of tables) {
+    if (has(t.name)) out.push({ kind: "table", table: t.name });
+    for (const c of t.columns) if (has(c.name)) out.push({ kind: "column", table: t.name, column: c.name });
+    if (out.length >= limit) return out.slice(0, limit);
+  }
+  for (const name of types) if (has(name)) out.push({ kind: "type", name });
+  return out.slice(0, limit);
+}

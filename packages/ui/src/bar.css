@@ -1,6 +1,8 @@
 /* The first row of every module (ModuleBar.tsx). */
 
 .ds-bar {
+  /* the ⌘F box floats from here (find.css) */
+  position: relative;
   display: flex;
   align-items: center;
   flex-wrap: wrap;

@@ -1284,3 +1284,14 @@ tr:hover > td > .cbtn,
   background: var(--bg-soft);
   color: var(--muted);
 }
+
+/* ⌘F: the table or column found */
+[data-module="db"] .er-table.found .er-box {
+  stroke: #ff9632;
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+
+[data-module="db"] .er-table .er-row.found rect {
+  fill: rgba(255, 150, 50, 0.4);
+}
